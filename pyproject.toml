@@ -1,0 +1,23 @@
+[project]
+name = "uedrlhf"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "jax[cuda12]",
+    "flax",
+    "optax",
+    "gymnax",
+    "jaxued",
+]
+
+[[tool.uv.index]]
+name = "jax-cuda"
+url = "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html"
+explicit = true
+
+[tool.uv.sources]
+jaxlib = { index = "jax-cuda" }
+jaxued = { git = "https://github.com/DramaCow/jaxued" }
