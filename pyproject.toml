@@ -25,4 +25,4 @@ jaxlib = { index = "jax-cuda" }
 jaxued = { git = "https://github.com/DramaCow/jaxued" }
 
 [tool.setuptools]
-packages = ["standalone_jaxnav", "jaxnav"]
+packages = ["standalone_jaxnav", "tests_jaxnav"]
