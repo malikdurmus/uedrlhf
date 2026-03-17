@@ -13,6 +13,7 @@ dependencies = [
     "jaxued",
     "pytest>=9.0.2",
     "brax>=0.14.1",
+    "jaxmarl",
 ]
 
 [[tool.uv.index]]
@@ -23,6 +24,7 @@ explicit = true
 [tool.uv.sources]
 jaxlib = { index = "jax-cuda" }
 jaxued = { git = "https://github.com/DramaCow/jaxued" }
+jaxmarl = { git = "https://github.com/malikdurmus/JaxMARL.git", }
 
 [tool.setuptools]
 packages = ["standalone_jaxnav", "tests_jaxnav"]
