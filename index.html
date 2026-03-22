@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Feedback — Pick Your Preference</title>
+  <meta name="description" content="Side-by-side image comparison tool for collecting human feedback." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Roboto Mono', 'ui-monospace', 'monospace'] },
+        },
+      },
+    };
+  </script>
+  <style>
+    body {
+      font-family: 'Roboto Mono', ui-monospace, monospace;
+    }
+
+    .img-card {
+      transition: border-color 0.2s ease;
+    }
+
+    .img-card:hover {
+      border-color: rgba(148, 163, 184, 0.4);
+    }
+
+    /* Fade-in for images */
+    .fade-enter {
+      animation: fadeIn 0.35s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* Spinner */
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-top-color: #94a3b8;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-800 text-gray-200 flex flex-col">
+
+  <!-- Header -->
+  <header class="w-full py-6 text-center select-none">
+    <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-slate-100">
+      Give Feedback
+    </h1>
+    <p class="mt-1 text-sm text-gray-400">To-do explain the user what to do</p>
+  </header>
+
+  <!-- Main content -->
+  <main class="flex-1 flex items-center justify-center px-4 pb-10">
+    <!-- Loading spinner (shown while fetching) -->
+    <div id="loader" class="flex flex-col items-center gap-3">
+      <div class="spinner"></div>
+      <span class="text-sm text-gray-500">Loading images…</span>
+    </div>
+
+    <!-- Image pair container -->
+    <div id="pair-container" class="hidden w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Left card -->
+      <div
+        class="img-card cursor-pointer rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm"
+        id="card-left">
+        <img id="img-left" class="w-full h-auto object-contain fade-enter" alt="Left image" />
+        <div class="px-4 py-2 text-xs text-gray-400 truncate text-center" id="label-left"></div>
+      </div>
+      <!-- Right card -->
+      <div
+        class="img-card cursor-pointer rounded-2xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm"
+        id="card-right">
+        <img id="img-right" class="w-full h-auto object-contain fade-enter" alt="Right image" />
+        <div class="px-4 py-2 text-xs text-gray-400 truncate text-center" id="label-right"></div>
+      </div>
+    </div>
+
+    <!-- Error state -->
+    <div id="error-box" class="hidden text-center">
+      <p class="text-red-400 text-lg font-medium" id="error-msg"></p>
+      <button onclick="loadPair()"
+        class="mt-4 px-5 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-sm font-medium transition">
+        Retry
+      </button>
+    </div>
+  </main>
+
+  <!-- Footer / counter -->
+  <footer class="w-full py-4 text-center text-xs text-gray-600 select-none">
+    Feedback submitted: <span id="counter" class="text-slate-300 font-semibold">0</span>
+  </footer>
+
+  <script>
+    // ---- DOM refs ----
+    const imgLeft = document.getElementById('img-left');
+    const imgRight = document.getElementById('img-right');
+    const labelLeft = document.getElementById('label-left');
+    const labelRight = document.getElementById('label-right');
+    const cardLeft = document.getElementById('card-left');
+    const cardRight = document.getElementById('card-right');
+    const loader = document.getElementById('loader');
+    const pairContainer = document.getElementById('pair-container');
+    const errorBox = document.getElementById('error-box');
+    const errorMsg = document.getElementById('error-msg');
+    const counter = document.getElementById('counter');
+
+    let startTime = null;
+    let currentPair = null;
+    let feedbackCount = 0;
+    let busy = false;  // prevent double-clicks
+
+    // ---- Load a new pair ----
+    async function loadPair() {
+      busy = true;
+      startTime = null;
+      showLoader(true);
+      showError(false);
+
+      try {
+        const res = await fetch('/next-pair');
+        const data = await res.json();
+
+        if (data.error) {
+          showError(true, data.error);
+          return;
+        }
+
+        currentPair = data;
+
+        // Track onload for both images
+        let loaded = 0;
+        const onBothLoaded = () => {
+          loaded++;
+          if (loaded === 2) {
+            startTime = performance.now();
+            showLoader(false);
+            busy = false;
+          }
+        };
+
+        imgLeft.onload = onBothLoaded;
+        imgRight.onload = onBothLoaded;
+        imgLeft.onerror = () => showError(true, 'Failed to load left image.');
+        imgRight.onerror = () => showError(true, 'Failed to load right image.');
+
+        // Re-trigger fade animation
+        imgLeft.classList.remove('fade-enter');
+        imgRight.classList.remove('fade-enter');
+        void imgLeft.offsetWidth; // force reflow
+        imgLeft.classList.add('fade-enter');
+        imgRight.classList.add('fade-enter');
+
+        imgLeft.src = '/images/' + data.left;
+        imgRight.src = '/images/' + data.right;
+        labelLeft.textContent = data.left;
+        labelRight.textContent = data.right;
+      } catch (err) {
+        showError(true, 'Network error — is the server running?');
+      }
+    }
+
+    // ---- Click handler ----
+    function handleClick(side, event) {
+      if (busy || !startTime) return;
+      busy = true;
+
+      const img = side === 0 ? imgLeft : imgRight;
+      const rect = img.getBoundingClientRect();
+      const x_pct = ((event.clientX - rect.left) / rect.width) * 100;
+      const y_pct = ((event.clientY - rect.top) / rect.height) * 100;
+      const time_ms = performance.now() - startTime;
+
+      const payload = {
+        image_id: side === 1 ? currentPair.left : currentPair.right,
+        choice: side,
+        x_pct: Math.round(x_pct * 100) / 100,
+        y_pct: Math.round(y_pct * 100) / 100,
+        time_ms: Math.round(time_ms * 10) / 10,
+      };
+
+      fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            feedbackCount++;
+            counter.textContent = feedbackCount;
+            loadPair();  // swap to next pair
+          } else {
+            busy = false;
+          }
+        })
+        .catch(() => {
+          showError(true, 'Failed to submit feedback.');
+          busy = false;
+        });
+    }
+
+    cardLeft.addEventListener('click', e => handleClick(0, e));
+    cardRight.addEventListener('click', e => handleClick(1, e));
+
+    // ---- Helpers ----
+    function showLoader(show) {
+      loader.classList.toggle('hidden', !show);
+      pairContainer.classList.toggle('hidden', show);
+    }
+    function showError(show, msg) {
+      if (show) {
+        errorMsg.textContent = msg;
+        loader.classList.add('hidden');
+        pairContainer.classList.add('hidden');
+        errorBox.classList.remove('hidden');
+      } else {
+        errorBox.classList.add('hidden');
+      }
+      busy = false;
+    }
+
+    // ---- Init ----
+    loadPair();
+  </script>
+</body>
+
+</html>

@@ -1,9 +1,9 @@
-import os
 from jaxmarl.environments.jaxnav.jaxnav_env import JaxNav
 from jaxmarl.environments.jaxnav.jaxnav_viz import JaxNavVisualizer
 import jax
 import matplotlib.pyplot as plt
 import uuid
+import os 
 
 env = JaxNav(num_agents=1)
 
@@ -17,7 +17,7 @@ rng , _rng = jax.random.split(rng)
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 
 for i in range(11):
-    state_id = uuid.uuid4()
+    state_id = uuid.uuid
 
     #extract a single state
     state = jax.tree_util.tree_map(lambda x : x[i] , env_state)
@@ -34,4 +34,3 @@ for i in range(11):
 
 #viz = JaxNavVisualizer(env, obs_list, env_state_list)
 #viz.animate("test.gif")
-
