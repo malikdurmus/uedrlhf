@@ -17,7 +17,7 @@ rng , _rng = jax.random.split(rng)
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 
 for i in range(11):
-    state_id = uuid.uuid
+    state_id = uuid.uuid4()
 
     #extract a single state
     state = jax.tree_util.tree_map(lambda x : x[i] , env_state)
