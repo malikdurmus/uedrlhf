@@ -73,7 +73,7 @@
     <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-slate-100">
       Give Feedback
     </h1>
-    <p class="mt-1 text-sm text-gray-400">To-do explain the user what to do</p>
+    <p class="mt-1 text-sm text-gray-400">Click the map that represents a harder/better environment.</p>
   </header>
 
   <!-- Main content -->
@@ -197,9 +197,12 @@
       const y_pct = ((event.clientY - rect.top) / rect.height) * 100;
       const time_ms = performance.now() - startTime;
 
+      // 0.0 means Left won, 1.0 means Right won
+      const preferenceScore = side === 0 ? 0.0 : 1.0;
+
       const payload = {
-        image_id: side === 1 ? currentPair.left : currentPair.right,
-        choice: side,
+        pair_id: currentPair.pair_id,
+        preference: preferenceScore,
         x_pct: Math.round(x_pct * 100) / 100,
         y_pct: Math.round(y_pct * 100) / 100,
         time_ms: Math.round(time_ms * 10) / 10,
