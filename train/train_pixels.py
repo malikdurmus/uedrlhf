@@ -1,29 +1,38 @@
 import os
-#os.environ['XLA_FLAGS'] = '--xla_gpu_autotune_level=0'
-#os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
-#os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.7'
-#os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
 import sqlite3
+from pyexpat import features
 import numpy as np
-
+import tensorflow as tf
 from PIL import Image
 from pathlib import Path
 from functools import partial
-
+import matplotlib.pyplot as plt
+from flax.nnx import Rngs
+from keras.src.ops import dtype
+from orbax.export import JaxModule, ExportManager, ServingConfig
 import jax
 import jax.numpy as jnp
 from flax import nnx
 from flax.serialization import to_bytes
 import optax
 
-# --- CONFIGURATION ---
+# -config
 IMG_SIZE = 64  
 BATCH_SIZE = 32
 EPOCHS = 20
 LEARNING_RATE = 3e-4
 MOMENTUM = 0.9
 
-# --- PATH SETUP ---
+
+tf.random.set_seed(0)  # Set the random seed for reproducibility.
+
+train_steps = 1200
+eval_every = 200
+batch_size = 32
+
+
+
+# path To do: rework
 script_path = Path(__file__).resolve()
 base_dir = script_path.parent.parent  # 'uedrlhf'
 img_dir = base_dir / "data" / "images"
@@ -36,157 +45,192 @@ save_dir.mkdir(parents=True, exist_ok=True)
 save_path = save_dir / "model_pixels.msgpack"
 
 
-# --- 1. DATA LOADER ---
-def load_dataset():
+
+def load_dataset(split: str = "train"):
+    """Load image pairs and preferences for a given split ('train' or 'test')."""
+    """returns: img1 shape (n, IMG_SIZE ,IMG_SIZE, 3)
+                img2 shape (n, IMG_SIZE ,IMG_SIZE, 3)
+                pref shape (n, IMG_SIZE ,IMG_SIZE, 3)
+     """
+
+    # LOAD data
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
-    # Grab all completed training pairs
+
     cursor.execute("""
         SELECT env_1_id, env_2_id, preference 
         FROM preference_pairs 
-        WHERE status='completed' AND split='train'
-    """)
+        WHERE status='completed' AND split=?
+    """, (split,))
     rows = cursor.fetchall()
     conn.close()
-
+    num_rows = len(rows)
     if len(rows) == 0:
-        raise ValueError("No completed training data found!")
+        raise ValueError(f"No completed {split} data found!")
 
-    img1_list, img2_list, pref_list = [], [], []
-    
-    for env_1_id, env_2_id, pref in rows:
-        # Load, resize, and normalize images to [0, 1]
+    # initialize arrays that hold the data
+    img1_array = np.empty( shape = (num_rows, IMG_SIZE, IMG_SIZE, 3), dtype = np.float32 )
+    img2_array = np.empty( shape = (num_rows, IMG_SIZE, IMG_SIZE, 3), dtype = np.float32 )
+    pref_array = np.empty(shape = (num_rows, IMG_SIZE, IMG_SIZE, 3) , dtype = np.float32 )
+
+    # loop over and load the data
+    for i, (env_1_id, env_2_id, pref) in enumerate(rows):
+
         img1 = Image.open(img_dir / f"{env_1_id}.png").convert("RGB").resize((IMG_SIZE, IMG_SIZE))
         img2 = Image.open(img_dir / f"{env_2_id}.png").convert("RGB").resize((IMG_SIZE, IMG_SIZE))
-        
-        img1_list.append(np.array(img1, dtype=np.float32) / 255.0)
-        img2_list.append(np.array(img2, dtype=np.float32) / 255.0)
-        pref_list.append(np.float32(pref))
 
-    print(f"Loaded {len(rows)} human-annotated pairs.")
-    return np.array(img1_list), np.array(img2_list), np.array(pref_list)
+        img1_array[i] = img1
+        img2_array[i] = img2
+        pref_array[i] = pref
 
 
-# --- 2. NETWORK DEFINITION ---
-class PixelPrefCNN(nnx.Module):
-    def __init__(self, *, rngs: nnx.Rngs):
-        self.conv1 = nnx.Conv(3, 32, kernel_size=(5, 5), rngs=rngs)
-        self.batch_norm1 = nnx.BatchNorm(32, rngs=rngs)
-        self.dropout1 = nnx.Dropout(rate=0.025)
-        
-        self.conv2 = nnx.Conv(32, 64, kernel_size=(3, 3), rngs=rngs)
-        self.batch_norm2 = nnx.BatchNorm(64, rngs=rngs)
-        
-        self.avg_pool = partial(nnx.avg_pool, window_shape=(2, 2), strides=(2, 2))
-        
-        self.linear1 = nnx.Linear(16384, 256, rngs=rngs)
-        self.dropout2 = nnx.Dropout(rate=0.025)
-        self.linear2 = nnx.Linear(256, 1, rngs=rngs)  
+    print(f"Loaded {len(rows)} pairs from '{split}' split.")
+    return np.array(img1_array), np.array(img2_array), np.array(pref_array)
 
-    def __call__(self, x, rngs: nnx.Rngs | None = None):
-        x = self.avg_pool(nnx.relu(self.batch_norm1(self.dropout1(self.conv1(x), rngs=rngs))))
-        x = self.avg_pool(nnx.relu(self.batch_norm2(self.conv2(x))))
-        x = x.reshape(x.shape[0], -1)  # flatten
-        x = nnx.relu(self.dropout2(self.linear1(x), rngs=rngs))
+
+
+
+
+# model takes a batch of images : n, 64, 64 , 3 (64x64 image and 3 channels )
+class CNN(nnx.Module):
+
+    def __init__(self, * , rngs: nnx.Rngs):
+        self.conv1 = nnx.Conv(in_features= 3 , out_features= 32 , kernel_size = (5,5),rngs= rngs)
+        self.batch_norm1 = nnx.BatchNorm(num_features=32 , rngs = rngs)
+        self.dropout1 = nnx.Dropout(rate= 0.025)
+        self.conv2 = nnx.Conv(in_features = 32 , out_features= 64 , kernel_size= (3,3) , rngs= rngs )
+        self.batch_norm2 = nnx.BatchNorm(num_features=64 , rngs = rngs)
+        self.avg_pool = partial(nnx.avg_pool, window_shape=(2,2),strides=(2,2))
+        # we shape = (14,14,64)
+        self.linear1 = nnx.Linear(in_features=57344, out_features= 256, rngs=rngs)
+        self.dropout2 = nnx.Dropout(rate=0.025, rngs=rngs)
+        self.linear2 = nnx.Linear(in_features=256, out_features=1, rngs= rngs)
+
+    def __call__(self, x, rngs : nnx.Rngs | None = None):
+        x= self.avg_pool(
+            nnx.relu(
+                self.batch_norm1(
+                    self.dropout1(
+                        self.conv1(x),rngs) ) ) )
+        # now shape 30,30,32
+
+        x = self.avg_pool(
+            nnx.relu(
+                self.batch_norm2(
+                        self.conv2(x), rngs) ) )
+        # now shape 14,14,64
+        x = x.reshape(x.shape[0],-1) # flatten
+        # now shape # (12544,)
+        x = nnx.relu(self.dropout2(self.linear1(x , rngs)))
         x = self.linear2(x)
-        return x.squeeze(-1) # scalar
+        x = x.squeeze()  # return scalar value
+        return x
+
+def loss_fn(model: CNN, data: tuple):
+    """
+    data: (image0: Image, image1: Image , preference: jax.Array)
+    
+    preferences: (Batch,) where 0.0 means img0 is preferred, 1 for img1
+    """
+    
+    img0, img1, preferences = data
+
+    combined_inputs = jnp.concatenate(img0, img1, axis = 0)
+
+    scores = model(combined_inputs) # this is done for efficient computing
 
 
-# --- 3. TRAINING LOGIC ---
-def loss_fn(model: PixelPrefCNN, img1_batch, img2_batch, pref_batch, rngs: nnx.Rngs):
-    
-    score_1 = model(img1_batch, rngs=rngs)
-    score_2 = model(img2_batch, rngs=rngs)
-    
-    # Bradley-Terry Preference Loss
-    log_p1_wins = jax.nn.log_sigmoid(score_1 - score_2)
-    log_p2_wins = jax.nn.log_sigmoid(score_2 - score_1)
-    loss = -jnp.mean(pref_batch * log_p1_wins + (1.0 - pref_batch) * log_p2_wins)
-    
-    return loss, (score_1, score_2)
+   
+    scores_input0 , scores_input1 = jnp.split(combined_inputs, 2, axis = 0 ) 
+    #score for image 0 , score for image 1
 
 
-@nnx.jit
-def train_step(model: PixelPrefCNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, rngs: nnx.Rngs, img1_batch, img2_batch, pref_batch):
-    
-    # Calculate gradients
-    grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
-    (loss, (score_1, score_2)), grads = grad_fn(model, img1_batch, img2_batch, pref_batch, rngs)
+    # raw scores (optimized for calculation)
+    logits = (scores_input0-scores_input0) # >0 if image 0 is preffered <0 otherwise
 
-    # Calculate custom accuracy metric
-    correct = jnp.where(pref_batch >= 0.5, score_1 > score_2, score_2 > score_1)
-    accuracy = jnp.mean(correct)
+    loss = optax.sigmoid_binary_cross_entropy(logits=logits, labels=preferences)
     
-    # In-place updates for metrics and optimizer.
-    metrics.update(loss=loss, accuracy=accuracy) 
+    return loss, logits
+
+def train_step(model: CNN, optimizer: nnx.Optimizer ,metrics: nnx.MultiMetric, rngs: nnx.Rngs,
+               batch : jax.Array
+               ):
+    grad_fn = nnx.value_and_grad(loss_fn)
+    (loss , logits), grads = grad_fn(model=model, data = batch)
+    metrics.update(loss = loss, logits= logits, labels=batch[-1])
+    
     optimizer.update(model, grads)
 
+def eval_step(model: CNN, metrics, batch ):
+    loss, logits = loss_fn(model, batch)
+    metrics.update(loss=loss, logits=logits, labels=batch)
 
-# --- 4. EXECUTION ---
 def main():
-    # Load Data
-    X1, X2, Y = load_dataset()
-    num_samples = len(Y)
-
-    # Create RNGs for parameter initialization AND dropout noise during training
-    rngs = nnx.Rngs(params=0, dropout=1)
     
-    # Initialize the model
-    model = PixelPrefCNN(rngs=rngs)
+    metrics_history = {
+    'train_loss': [],
+    'train_accuracy': [],
+    'test_loss': [],
+    'test_accuracy': [],
+    }
     
-    # Initialize Optimizer
-    optimizer = nnx.Optimizer(
-        model, optax.adamw(LEARNING_RATE, b1=MOMENTUM), wrt=nnx.Param
-    ) 
 
-    # Create Training and Eval Views
+
+    ds_train = load_dataset("train")
+    ds_test  = load_dataset("test")
+
+    rngs = nnx.Rngs(0)
+    model = CNN(rngs=rngs)
+    metrics = nnx.MultiMetric(
+        accuracy=nnx.metrics.Accuracy(),
+        loss=nnx.metrics.Average('loss'),
+    )
+    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
     train_model = nnx.view(model, deterministic=False, use_running_average=False)
     eval_model = nnx.view(model, deterministic=True, use_running_average=True)
-
-    # Initialize Metrics to track averages over the epoch
-    # (New code)
-    metrics = nnx.MultiMetric(
-        loss=nnx.metrics.Average('loss'),          
-        accuracy=nnx.metrics.Average('accuracy') 
-    )
-
-    print("Starting Training...")
     
-    indices = np.arange(num_samples)
+
+
+    for step, batch in enumerate(ds_train.as_numpy_iterator()):
     
-    for epoch in range(EPOCHS):
-        np.random.shuffle(indices)
+  # Run the optimization for one step and make a stateful update to the following:
+  # - The train state's model parameters
+  # - The optimizer state
+  # - The training loss and accuracy batch metrics
+        train_step(train_model, optimizer, metrics, rngs, batch)
 
-        for i in range(0, num_samples, BATCH_SIZE):
-            batch_idx = indices[i:i + BATCH_SIZE]
-            
-            # Skip incomplete final batch if it's too small
-            if len(batch_idx) < 2:
-                continue
-                
-            img1_batch = jnp.array(X1[batch_idx])
-            img2_batch = jnp.array(X2[batch_idx])
-            pref_batch = jnp.array(Y[batch_idx])
-            
-            # Call train_step! NNX magically updates model, optimizer, and metrics in-place.
-            train_step(train_model, optimizer, metrics, rngs, img1_batch, img2_batch, pref_batch)
-            
-        # --- EPOCH END LOGGING ---
-        # Compute the accumulated metrics for the epoch
-        metric_values = metrics.compute()
-        print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {metric_values['loss']:.4f} | Accuracy: {metric_values['accuracy']*100:.1f}%")
-        
-        # Reset metrics for the next epoch
-        metrics.reset()
+        if step > 0 and (step % eval_every == 0 or step == train_steps - 1):  # One training epoch has passed.
+            # Log the training metrics.
+            # for metric, value in metrics.compute().items():  # Compute the metrics.
+            metrics_history[f'train_{metric}'].append(value)  # Record the metrics.
+            metrics.reset()  # Reset the metrics for the test set.
 
-    # --- SAVE THE MODEL ---
-    # We extract the state from the base 'model' object, not the view.
-    model_state = nnx.state(model)
-    with open(save_path, "wb") as f:
-        f.write(to_bytes(model_state))
-    
-    print(f"Model successfully saved to {save_path}")
+            # Compute the metrics on the test set after each training epoch.
+            for test_batch in ds_train.as_numpy_iterator():
+                eval_step(eval_model, metrics, test_batch)
 
-if __name__ == "__main__":
-    main()
+            # Log the test metrics.
+            for metric, value in metrics.compute().items():
+                metrics_history[f'test_{metric}'].append(value)
+            metrics.reset()  # Reset the metrics for the next training epoch.
+
+            # Plot loss and accuracy in subplots
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+            ax1.set_title('Loss')
+            ax2.set_title('Accuracy')
+            for dataset in ('train', 'test'):
+                ax1.plot(metrics_history[f'{dataset}_loss'], label=f'{dataset}_loss')
+                ax2.plot(metrics_history[f'{dataset}_accuracy'], label=f'{dataset}_accuracy')
+            ax1.legend()
+            ax2.legend()
+            plt.show()
+
+
+
+
+
+main()
+
+
+
+
