@@ -2,6 +2,7 @@ import os
 import sqlite3
 import pickle
 import uuid
+import yaml
 from pathlib import Path
 import jax
 import numpy as np
@@ -9,19 +10,41 @@ import matplotlib.pyplot as plt
 
 from jaxmarl.environments.jaxnav.jaxnav_env import JaxNav
 
-# config # To do: use Config.yaml 
-NUM_TRAIN_PAIRS = 50
-NUM_TEST_PAIRS = 20
+# load config
+script_path = Path(__file__).resolve()
+base_dir = script_path.parent.parent
+config_path = base_dir / "config.yaml"
+
+with open(config_path, "r") as f:
+    config = yaml.safe_load(f)
+
+FEEDBACK_TYPE = config["feedback_type"]           # "difficulty_feedback" or "learnability_feedback"
+
+# Map feedback_type to subfolder name
+SUBFOLDER_MAP = {
+    "difficulty_feedback": "difficulty",
+    "learnability_feedback": "learnability",
+}
+
+if FEEDBACK_TYPE not in SUBFOLDER_MAP:
+    raise ValueError(
+        f"Unknown feedback_type '{FEEDBACK_TYPE}' in config.yaml. "
+        f"Must be one of: {list(SUBFOLDER_MAP.keys())}"
+    )
+
+subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
+
+# env generation config TODO: make it configurable
+NUM_TRAIN_PAIRS = 1400
+NUM_TEST_PAIRS = 140
 TOTAL_PAIRS = NUM_TRAIN_PAIRS + NUM_TEST_PAIRS
 TOTAL_ENVS = TOTAL_PAIRS * 2  # 2 envs per pair
 
-# path
-script_path = Path(__file__).resolve()
-base_dir = script_path.parent.parent  
-img_dir = base_dir / "data" / "images"
-arr_dir = base_dir / "data" / "arrays"
-db_path = base_dir / "data" / "feedback.db"
-
+# paths
+data_dir = base_dir / "data" / subfolder
+img_dir = data_dir / "images"
+arr_dir = data_dir / "arrays"
+db_path = data_dir / "feedback.db"
 
 # check directories
 img_dir.mkdir(parents=True, exist_ok=True)
@@ -32,7 +55,7 @@ arr_dir.mkdir(parents=True, exist_ok=True)
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 cursor.execute('''
-    CREATE TABLE IF NOT EXISTS preference_pairs (
+    CREATE TABLE IF NOT EXISTS human_preference_pairs (
         pair_id INTEGER PRIMARY KEY AUTOINCREMENT,
         env_1_id TEXT,
         env_2_id TEXT,
@@ -41,6 +64,19 @@ cursor.execute('''
         status TEXT, x_pct REAL , y_pct REAL , time_ms REAL, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
 ''')
+
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS llm_preference_pairs (
+        pair_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        env_1_id TEXT,
+        env_2_id TEXT,
+        split TEXT,
+        preference REAL,
+        status TEXT, x_pct REAL , y_pct REAL , time_ms REAL, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+''')
+
+
 conn.commit()
 
 
@@ -82,19 +118,24 @@ for pair_idx in range(TOTAL_PAIRS):
         ax.clear() 
         env.init_render(ax, state, lidar=False, agent=True, goal=True)
         plt.savefig(img_dir / f"{env_id}.png")
-    
-    # save to prefrence db
+
+    # save to preference db
     cursor.execute("""
-        INSERT INTO preference_pairs (env_1_id, env_2_id, split, status) 
+        INSERT INTO human_preference_pairs (env_1_id, env_2_id, split, status) 
         VALUES (?, ?, ?, ?)
     """, (id_1, id_2, split, "pending"))
-    
+
+    cursor.execute("""
+        INSERT INTO llm_preference_pairs (env_1_id, env_2_id, split, status) 
+        VALUES (?, ?, ?, ?)
+    """, (id_1, id_2, split, "pending"))
+
+
 # clean up
 conn.commit()
 conn.close()
 plt.close(fig)
 
-print(f"Done! Saved to {base_dir}/data/")
-
-
-
+print(f"[{FEEDBACK_TYPE}] Done! Saved to {data_dir}/")
+print(f"Total pairs: {TOTAL_PAIRS}")
+print("Two different tables are saved: human_feedback_pairs and llm_feedback_pairs")

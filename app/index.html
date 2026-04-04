@@ -70,10 +70,10 @@
 
   <!-- Header -->
   <header class="w-full py-6 text-center select-none">
-    <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-slate-100">
+    <h1 id="page-title" class="text-3xl sm:text-4xl font-bold tracking-tight text-slate-100">
       Give Feedback
     </h1>
-    <p class="mt-1 text-sm text-gray-400">Click the map that represents a harder/better environment.</p>
+    <p id="page-subtitle" class="mt-1 text-sm text-gray-400">Loading…</p>
   </header>
 
   <!-- Main content -->
@@ -100,6 +100,14 @@
         <img id="img-right" class="w-full h-auto object-contain fade-enter" alt="Right image" />
         <div class="px-4 py-2 text-xs text-gray-400 truncate text-center" id="label-right"></div>
       </div>
+    </div>
+
+    <!-- Tie / Equal button -->
+    <div id="tie-container" class="hidden w-full max-w-6xl flex justify-center mt-4">
+      <button id="btn-tie"
+        class="px-8 py-3 rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm text-gray-300 text-sm font-medium hover:bg-white/10 hover:border-slate-400/40 transition cursor-pointer select-none">
+        Equal / Tie
+      </button>
     </div>
 
     <!-- Error state -->
@@ -232,10 +240,47 @@
     cardLeft.addEventListener('click', e => handleClick(0, e));
     cardRight.addEventListener('click', e => handleClick(1, e));
 
+    // ---- Tie button handler ----
+    document.getElementById('btn-tie').addEventListener('click', () => {
+      if (busy || !startTime) return;
+      busy = true;
+
+      const time_ms = performance.now() - startTime;
+
+      const payload = {
+        pair_id: currentPair.pair_id,
+        preference: 0.5,
+        x_pct: 50,
+        y_pct: 50,
+        time_ms: Math.round(time_ms * 10) / 10,
+      };
+
+      fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            feedbackCount++;
+            counter.textContent = feedbackCount;
+            loadPair();
+          } else {
+            busy = false;
+          }
+        })
+        .catch(() => {
+          showError(true, 'Failed to submit feedback.');
+          busy = false;
+        });
+    });
+
     // ---- Helpers ----
     function showLoader(show) {
       loader.classList.toggle('hidden', !show);
       pairContainer.classList.toggle('hidden', show);
+      document.getElementById('tie-container').classList.toggle('hidden', show);
     }
     function showError(show, msg) {
       if (show) {
@@ -250,7 +295,19 @@
     }
 
     // ---- Init ----
-    loadPair();
+    async function init() {
+      try {
+        const res = await fetch('/config');
+        const cfg = await res.json();
+        document.getElementById('page-title').textContent = cfg.title;
+        document.getElementById('page-subtitle').textContent = cfg.subtitle;
+        document.title = cfg.title + ' — Pick Your Preference';
+      } catch (e) {
+        // fallback: keep defaults
+      }
+      loadPair();
+    }
+    init();
   </script>
 </body>
 

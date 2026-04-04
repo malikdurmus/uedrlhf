@@ -1,4 +1,5 @@
 import os
+import yaml
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,12 +12,46 @@ from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-BASE_DIR = Path(__file__).resolve().parent.parent 
-DATA_DIR = BASE_DIR / "data"
+# config
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+config_path = BASE_DIR / "config.yaml"
+with open(config_path, "r") as f:
+    config = yaml.safe_load(f)
+
+FEEDBACK_TYPE = config["feedback_type"]
+
+SUBFOLDER_MAP = {
+    "difficulty_feedback": "difficulty",
+    "learnability_feedback": "learnability",
+}
+
+if FEEDBACK_TYPE not in SUBFOLDER_MAP:
+    raise ValueError(
+        f"Unknown feedback_type '{FEEDBACK_TYPE}' in config.yaml. "
+        f"Must be one of: {list(SUBFOLDER_MAP.keys())}"
+    )
+
+subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
+
+# paths
+DATA_DIR = BASE_DIR / "data" / subfolder
 IMAGES_DIR = DATA_DIR / "images"
 
-
 DATABASE_URL = f"sqlite:///{DATA_DIR / 'feedback.db'}"
+
+# UI text for feedback type
+FEEDBACK_UI = {
+    "difficulty_feedback": {
+        "title": "Difficulty Feedback",
+        "subtitle": "Click the map that represents a harder environment.",
+    },
+    "learnability_feedback": {
+        "title": "Learnability Feedback",
+        "subtitle": "Click the map that represents a more learnable environment.",
+    },
+}
+
 # Database setup
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
@@ -24,7 +59,7 @@ Base = declarative_base()
 
 # --- DATABASE MODEL ---
 class PreferencePair(Base):
-    __tablename__ = "preference_pairs"
+    __tablename__ = "human_preference_pairs"
     pair_id = Column(Integer, primary_key=True, autoincrement=True)
     env_1_id = Column(String, nullable=False)
     env_2_id = Column(String, nullable=False)
@@ -74,6 +109,16 @@ app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 @app.get("/")
 async def index():
     return FileResponse(Path(__file__).resolve().parent / "index.html")
+
+@app.get("/config")
+async def get_config():
+    """Expose feedback type and UI text to the frontend."""
+    ui = FEEDBACK_UI[FEEDBACK_TYPE]
+    return {
+        "feedback_type": FEEDBACK_TYPE,
+        "title": ui["title"],
+        "subtitle": ui["subtitle"],
+    }
 
 @app.get("/next-pair")
 async def next_pair():
