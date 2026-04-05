@@ -7,6 +7,7 @@ from datasets import Dataset, Features, Array3D, Value, Sequence
 import yaml
 import PIL.Image
 
+RESIZE = (64,64)
 
 # -------------------------------- helpers
 def sanitize_table_name(model_name: str) -> str:
@@ -53,7 +54,7 @@ def state_to_dict(state_obj) -> dict:
 
 
 def load_image_as_nparray(file_path: Path) -> np.ndarray:
-    img = PIL.Image.open(file_path).convert("RGB")
+    img = PIL.Image.open(file_path).resize(RESIZE).convert("RGB")
     return np.array(img).astype(np.float32)
 
 # -------------------------------- helpers TODO move the helpers to some other util file
@@ -119,23 +120,21 @@ def main():
         for row in rows:
             env_0_id, env_1_id, preference, split, x_pct, y_pct, time_ms = row
 
-            arr_0_path = arr_dir / f"{env_0_id}.pkl"
-            arr_1_path = arr_dir / f"{env_1_id}.pkl"
+            #arr_0_path = arr_dir / f"{env_0_id}.pkl"
+            #arr_1_path = arr_dir / f"{env_1_id}.pkl"
             img_0_path = img_dir / f"{env_0_id}.png"
             img_1_path = img_dir / f"{env_1_id}.png"
 
-            if not all(p.exists() for p in [arr_0_path, arr_1_path, img_0_path, img_1_path]):
+            if not all(p.exists() for p in [img_0_path, img_1_path]):
                 skipped += 1
                 continue
 
-            arr_0 = load_array(arr_0_path)
-            arr_1 = load_array(arr_1_path)
+            #arr_0 = load_array(arr_0_path)
+            #arr_1 = load_array(arr_1_path)
             img_0 = load_image_as_nparray(img_0_path)
             img_1 = load_image_as_nparray(img_1_path)
 
             yield {
-                "env_0_array": state_to_dict(arr_0),
-                "env_1_array": state_to_dict(arr_1),
                 "env_0_image": img_0,
                 "env_1_image": img_1,
                 "preference": preference,
@@ -149,7 +148,7 @@ def main():
             print(f"Skipped {skipped} rows (missing files)")
 
     ds = Dataset.from_generator(ds_generator, writer_batch_size=10)
-    #ds = ds.with_format("jax")
+    ds = ds.with_format("jax")
 
     output_dir = data_dir / f"compiled_{table_name}"
     ds.save_to_disk(str(output_dir))

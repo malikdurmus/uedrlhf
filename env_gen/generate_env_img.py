@@ -35,8 +35,8 @@ if FEEDBACK_TYPE not in SUBFOLDER_MAP:
 subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
 
 # env generation config TODO: make it configurable
-NUM_TRAIN_PAIRS = 1400
-NUM_TEST_PAIRS = 140
+NUM_TRAIN_PAIRS = 10000
+NUM_TEST_PAIRS = 1000
 TOTAL_PAIRS = NUM_TRAIN_PAIRS + NUM_TEST_PAIRS
 TOTAL_ENVS = TOTAL_PAIRS * 2  # 2 envs per pair
 
@@ -81,7 +81,10 @@ conn.commit()
 
 
 
-rng = jax.random.PRNGKey(42)  # Fixed seed for reproducibility
+import time
+seed = int(time.time())
+print(f"Using PRNG seed: {seed}")
+rng = jax.random.PRNGKey(seed)  # Dynamic seed for unique envs across runs
 reset_rng = jax.random.split(rng, TOTAL_ENVS)
 env = JaxNav(num_agents=1)
 obsv, env_state = jax.vmap(env.reset)(reset_rng)
@@ -98,8 +101,8 @@ for pair_idx in range(TOTAL_PAIRS):
     split = "train" if pair_idx < NUM_TRAIN_PAIRS else "test"
     
     # generate uuid
-    id_1 = f"{split}_{pair_idx:03d}_A_{uuid.uuid4().hex[:4]}"
-    id_2 = f"{split}_{pair_idx:03d}_B_{uuid.uuid4().hex[:4]}"
+    id_1 = f"{split}_{pair_idx:03d}_A_{uuid.uuid4().hex[:8]}"
+    id_2 = f"{split}_{pair_idx:03d}_B_{uuid.uuid4().hex[:8]}"
     
     
     idx_1 = pair_idx * 2
