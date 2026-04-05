@@ -67,7 +67,7 @@ class PreferencePair(Base):
     status = Column(String, default="pending")
     
     # Feedback data
-    preference = Column(Float, nullable=True) # 1.0 (Left/Env1), 0.0 (Right/Env2), 0.5 (Tie)
+    preference = Column(Float, nullable=True) # 0.0 (Left/Env0), 0.1 (Right/Env1), 0.5 (Tie)
     x_pct = Column(Float, nullable=True)      # x position (for xai later on)
     y_pct = Column(Float, nullable=True)      # y position (for xai later on)
     time_ms = Column(Float, nullable=True)    # time taken for feedback selection
