@@ -17,6 +17,10 @@ dependencies = [
     "fastapi[standard]>=0.135.1",
     "sqlalchemy>=2.0.48",
     "tensorflow>=2.21.0",
+    "datasets>=4.8.4",
+    "pyyaml>=6.0",
+    "google-genai>=1.0",
+    "python-dotenv>=1.0",
 ]
 
 [[tool.uv.index]]
