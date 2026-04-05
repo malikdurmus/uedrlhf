@@ -21,8 +21,9 @@ dependencies = [
     "pyyaml>=6.0",
     "google-genai>=1.0",
     "python-dotenv>=1.0",
-    "torch>=2.11.0",
-    "torchvision>=0.26.0",
+    "nvidia-cudnn-cu12>=9.20.0.48",
+    "torch",
+    "torchvision"
 ]
 
 [[tool.uv.index]]
@@ -30,10 +31,19 @@ name = "jax-cuda"
 url = "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+
 [tool.uv.sources]
 jaxlib = { index = "jax-cuda" }
 jaxued = { git = "https://github.com/DramaCow/jaxued" }
 jaxmarl = { git = "https://github.com/malikdurmus/JaxMARL.git"}
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
 
 [tool.setuptools]
 packages = ["standalone_jaxnav", "tests_jaxnav"]
