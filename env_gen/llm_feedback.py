@@ -11,7 +11,7 @@ so you can compare results across models and against human feedback.
 
 Set your API key via the GEMINI_API_KEY environment variable or --api-key flag.
 """
-
+import numpy as np
 import os
 import re
 import sys
@@ -34,24 +34,36 @@ base_dir = script_path.parent.parent
 
 # load .env from project root
 load_dotenv(base_dir / ".env")
-
-config_path = base_dir / "config.yaml"
+config_path = base_dir / "llm_feedback_config.yaml"
 
 with open(config_path, "r") as f:
     config = yaml.safe_load(f)
 
-FEEDBACK_TYPE = config["feedback_type"]
+
+FEEDBACK_TYPE      = config["feedback_type"]
+LEARNABILITY_MODE  = config.get("learnability_mode", "dijkstra")  # default to dijkstra
 
 SUBFOLDER_MAP = {
     "difficulty_feedback": "difficulty",
     "learnability_feedback": "learnability",
 }
 
+VALID_LEARNABILITY_MODES = {"dijkstra", "param"}
+
 if FEEDBACK_TYPE not in SUBFOLDER_MAP:
     raise ValueError(
         f"Unknown feedback_type '{FEEDBACK_TYPE}' in config.yaml. "
         f"Must be one of: {list(SUBFOLDER_MAP.keys())}"
     )
+
+# then validate learnability_mode
+if FEEDBACK_TYPE == "learnability_feedback":
+    if LEARNABILITY_MODE not in VALID_LEARNABILITY_MODES:
+        raise ValueError(
+            f"Unknown learnability_mode '{LEARNABILITY_MODE}' in config.yaml. "
+            f"Must be one of: {VALID_LEARNABILITY_MODES}"
+        )
+    print(f"Learnability mode: {LEARNABILITY_MODE}")
 
 subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
 
@@ -121,32 +133,39 @@ def sanitize_table_name(model_name: str) -> str:
 
 
 def create_model_table(cursor: sqlite3.Cursor, table_name: str):
-    """Create a model-specific preference table if it doesn't exist."""
+    bin_col = "bin INTEGER," if FEEDBACK_TYPE == "learnability_feedback" else ""
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS "{table_name}" (
-            pair_id INTEGER PRIMARY KEY,
-            env_1_id TEXT NOT NULL,
-            env_2_id TEXT NOT NULL,
-            split TEXT NOT NULL,
-            preference REAL,
-            status TEXT DEFAULT 'pending',
-            x_pct REAL,
-            y_pct REAL,
-            time_ms REAL,
+            pair_id      INTEGER PRIMARY KEY,
+            env_1_id     TEXT NOT NULL,
+            env_2_id     TEXT NOT NULL,
+            split        TEXT NOT NULL,
+            {bin_col}
+            preference   REAL,
+            status       TEXT DEFAULT 'pending',
+            x_pct        REAL,
+            y_pct        REAL,
+            time_ms      REAL,
             raw_response TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp    DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
 
 def populate_from_llm_pairs(cursor: sqlite3.Cursor, table_name: str):
-    """Copy pairs from llm_preference_pairs into the model table (skip existing)."""
-    cursor.execute(f"""
-        INSERT OR IGNORE INTO "{table_name}" (pair_id, env_1_id, env_2_id, split, status)
-        SELECT pair_id, env_1_id, env_2_id, split, 'pending'
-        FROM llm_preference_pairs
-    """)
-
+    if FEEDBACK_TYPE == "learnability_feedback":
+        source_table = f"llm_preference_pairs_{LEARNABILITY_MODE}"
+        cursor.execute(f"""
+            INSERT OR IGNORE INTO "{table_name}" (pair_id, env_1_id, env_2_id, split, bin, status)
+            SELECT pair_id, env_1_id, env_2_id, split, bin, 'pending'
+            FROM "{source_table}"
+        """)
+    else:
+        cursor.execute(f"""
+            INSERT OR IGNORE INTO "{table_name}" (pair_id, env_1_id, env_2_id, split, status)
+            SELECT pair_id, env_1_id, env_2_id, split, 'pending'
+            FROM llm_preference_pairs
+        """)
 
 def choice_to_preference(choice: str) -> float:
     """Map choice string to preference score.
@@ -240,7 +259,13 @@ def main():
 
     client = genai.Client(api_key=api_key)
 
-    table_name = sanitize_table_name(args.model)
+    if FEEDBACK_TYPE == "learnability_feedback":
+        table_name = sanitize_table_name(args.model) + f"_{LEARNABILITY_MODE}"
+        
+    else:
+        table_name = sanitize_table_name(args.model)
+    
+    
     prompt = PROMPTS[FEEDBACK_TYPE]
 
     print(f"Feedback type : {FEEDBACK_TYPE}")
@@ -284,9 +309,19 @@ def main():
             continue
 
         try:
+            # Gemini might have some positional bias because it usually preferences 1, so switch the labels half the time
+            swapped = np.random.random() > 0.5
+            if swapped:
+                img_a, img_b = img_2, img_1
+            else:
+                img_a, img_b = img_1, img_2
+
             result = get_llm_preference(
-                client, args.model, img_1, img_2, prompt
+                client, args.model, img_a, img_b, prompt
             )
+            raw_pref = result["preference"]
+            if swapped and raw_pref != 0.5:
+                raw_pref =  1 - raw_pref
 
             cursor.execute(
                 f"""
@@ -296,7 +331,7 @@ def main():
                 WHERE pair_id = ?
                 """,
                 (
-                    result["preference"],
+                    raw_pref,
                     result["x_pct"],
                     result["y_pct"],
                     result["time_ms"],
@@ -307,7 +342,7 @@ def main():
             )
             conn.commit()
 
-            label = {0.0: "A (left)", 1.0: "B (right)", 0.5: "TIE"}[result["preference"]]
+            label = {0.0: "A (left)", 1.0: "B (right)", 0.5: "TIE"}[raw_pref]
             print(
                 f"  [{i+1}/{len(pending)}] Pair {pair_id}: {label}  "
                 f"({result['x_pct']:.1f}%, {result['y_pct']:.1f}%)  "
@@ -321,7 +356,8 @@ def main():
 
         # rate limiting
         if i < len(pending) - 1:
-            time.sleep(args.delay)
+            #time.sleep(args.delay)
+            pass
 
     conn.close()
 

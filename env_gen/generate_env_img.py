@@ -1,4 +1,6 @@
 import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "False"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.7"
 import sqlite3
 import pickle
 import uuid
@@ -35,8 +37,8 @@ if FEEDBACK_TYPE not in SUBFOLDER_MAP:
 subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
 
 # env generation config TODO: make it configurable
-NUM_TRAIN_PAIRS = 10000
-NUM_TEST_PAIRS = 1000
+NUM_TRAIN_PAIRS = 7000
+NUM_TEST_PAIRS = 700
 TOTAL_PAIRS = NUM_TRAIN_PAIRS + NUM_TEST_PAIRS
 TOTAL_ENVS = TOTAL_PAIRS * 2  # 2 envs per pair
 
@@ -93,17 +95,20 @@ rng , _rng = jax.random.split(rng)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 
-
+    
 # generate envs image arrays
 
 for pair_idx in range(TOTAL_PAIRS):
     # split the data
     split = "train" if pair_idx < NUM_TRAIN_PAIRS else "test"
-    
-    # generate uuid
-    id_1 = f"{split}_{pair_idx:03d}_A_{uuid.uuid4().hex[:8]}"
-    id_2 = f"{split}_{pair_idx:03d}_B_{uuid.uuid4().hex[:8]}"
-    
+
+    while True:
+        id_1 = f"{split}_{pair_idx:03d}_A_{uuid.uuid4().hex[:8]}"
+        id_2 = f"{split}_{pair_idx:03d}_B_{uuid.uuid4().hex[:8]}"
+        
+        # Check if either of these IDs already exists as an image or array
+        if not (img_dir / f"{id_1}.png").exists() and not (img_dir / f"{id_2}.png").exists():
+            break
     
     idx_1 = pair_idx * 2
     idx_2 = pair_idx * 2 + 1

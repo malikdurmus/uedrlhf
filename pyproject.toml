@@ -23,7 +23,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "nvidia-cudnn-cu12>=9.20.0.48",
     "torch",
-    "torchvision"
+    "torchvision",
+    "numpy>=2.4.4",
 ]
 
 [[tool.uv.index]]
@@ -40,7 +41,7 @@ explicit = true
 [tool.uv.sources]
 jaxlib = { index = "jax-cuda" }
 jaxued = { git = "https://github.com/DramaCow/jaxued" }
-jaxmarl = { git = "https://github.com/malikdurmus/JaxMARL.git"}
+jaxmarl = { git = "https://github.com/malikdurmus/JaxMARL.git" , branch = "experimental"}
 torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }
 

@@ -15,16 +15,19 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 # config
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-config_path = BASE_DIR / "config.yaml"
+config_path = BASE_DIR / "human_feedback_config.yaml"
 with open(config_path, "r") as f:
     config = yaml.safe_load(f)
 
-FEEDBACK_TYPE = config["feedback_type"]
+FEEDBACK_TYPE     = config["feedback_type"]
+LEARNABILITY_MODE = config.get("learnability_mode", "dijkstra")
 
 SUBFOLDER_MAP = {
     "difficulty_feedback": "difficulty",
     "learnability_feedback": "learnability",
 }
+VALID_LEARNABILITY_MODES = {"dijkstra", "param"}
+
 
 if FEEDBACK_TYPE not in SUBFOLDER_MAP:
     raise ValueError(
@@ -32,13 +35,30 @@ if FEEDBACK_TYPE not in SUBFOLDER_MAP:
         f"Must be one of: {list(SUBFOLDER_MAP.keys())}"
     )
 
+if FEEDBACK_TYPE == "learnability_feedback":
+    if LEARNABILITY_MODE not in VALID_LEARNABILITY_MODES:
+        raise ValueError(
+            f"Unknown learnability_mode '{LEARNABILITY_MODE}' in config.yaml. "
+            f"Must be one of: {VALID_LEARNABILITY_MODES}"
+        )
+
+
 subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
+
+# Resolve table name: mirrors compile_dataset.py logic
+#   difficulty_feedback    → human_preference_pairs
+#   learnability_feedback  → human_preference_pairs_<learnability_mode>
+if FEEDBACK_TYPE == "learnability_feedback":
+    TABLE_NAME = f"human_preference_pairs_{LEARNABILITY_MODE}"
+else:
+    TABLE_NAME = "human_preference_pairs"
 
 # paths
 DATA_DIR = BASE_DIR / "data" / subfolder
 IMAGES_DIR = DATA_DIR / "images"
 
 DATABASE_URL = f"sqlite:///{DATA_DIR / 'feedback.db'}"
+
 
 # UI text for feedback type
 FEEDBACK_UI = {
@@ -59,7 +79,7 @@ Base = declarative_base()
 
 # --- DATABASE MODEL ---
 class PreferencePair(Base):
-    __tablename__ = "human_preference_pairs"
+    __tablename__ = TABLE_NAME
     pair_id = Column(Integer, primary_key=True, autoincrement=True)
     env_1_id = Column(String, nullable=False)
     env_2_id = Column(String, nullable=False)

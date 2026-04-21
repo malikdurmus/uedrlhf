@@ -1,15 +1,17 @@
+import time
 import os
 from pathlib import Path
 import pdb
 from queue import Queue
 import threading
+import orbax.checkpoint as ocp
 script_path = Path(__file__).resolve()
 base_dir = script_path.parent.parent  
 
 import numpy as np
 from functools import partial
 from torch.utils.data import DataLoader
-
+import wandb
 import jax
 import jax.numpy as jnp
 from flax import nnx
@@ -19,13 +21,9 @@ from datasets import load_from_disk
 # -configs
 IMG_SIZE = 64  
 BATCH_SIZE = 512
-EPOCHS = 20
-
-# paths 
-img_dir = base_dir / "data" / "images"
-db_path = base_dir / "data" / "feedback.db"
-save_dir = base_dir / "train"
-save_dir.mkdir(parents=True, exist_ok=True)
+EPOCHS = 50
+dataset_path= "data/difficulty/compiled_gemini_2_5_flash_20k"
+model_type= dataset_path[5:]
 
 class CNN(nnx.Module):
     def __init__(self, * , rngs: nnx.Rngs):
@@ -122,7 +120,19 @@ def prefetch_to_gpu(dataloader, queue_size = 2 ):
 
 def main():
 
-    ds = load_from_disk("data/difficulty/compiled_gemini_2_5_flash")
+    wandb.init(
+        project="uedrlhf",          # groups all runs for this project
+        name="cnn-difficulty-20k",   # name for this specific run
+        config={                      
+            "batch_size": BATCH_SIZE,
+            "epochs": EPOCHS,
+            "img_size": IMG_SIZE,
+            "learning_rate": 1e-3,
+            "optimizer": "adam",
+            "dropout": 0.025,
+        }
+    )
+    ds = load_from_disk(dataset_path)
     ds_splitted = ds.train_test_split(test_size=0.1)
     
 
@@ -133,7 +143,7 @@ def main():
         ds_splitted["train"], 
         batch_size=BATCH_SIZE, 
         shuffle=True, 
-        drop_last=True, 
+        drop_last=False, 
         num_workers=4)
 
     eval_loader = DataLoader(
@@ -145,11 +155,14 @@ def main():
 
     rngs = nnx.Rngs(0)
     model = CNN(rngs=rngs)
-    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+    optimizer = nnx.Optimizer(model, optax.adam(learning_rate=1e-3), wrt=nnx.Param)
     
     train_model = nnx.view(model, deterministic=False, use_running_average=False)
     eval_model = nnx.view(model, deterministic=True, use_running_average=False)
-    
+
+    best_eval_loss = float("inf") # keeps track of the best model/ loss 
+
+    # ----- TRAINING & EVAL LOOP
     print("Starting training...")
     for epoch in range(EPOCHS):
         
@@ -164,23 +177,55 @@ def main():
 
             epoch_train_losses.append(loss.item())
             epoch_train_accs.append(acc.item())
+        
+        # ------ avg in batch
+        train_loss_avg= np.mean(epoch_train_losses)
+        train_acc_avg = np.mean(epoch_train_accs)
 
-        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {np.mean(epoch_train_losses):.4f}, Train Acc: {np.mean(epoch_train_accs):.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {train_loss_avg:.4f}, Train Acc: {train_acc_avg:.4f}")
 
         epoch_eval_losses = []
         epoch_eval_accs = []
 
         # --- EVAL ---
-        model.eval()
+        model.eval() # switch to eval view
 
         for batch_tuple in prefetch_to_gpu(eval_loader):
             loss, acc = eval_step(model, batch_tuple)
             epoch_eval_losses.append(loss.item())
             epoch_eval_accs.append(acc.item())
-        print(f"Epoch {epoch+1}/{EPOCHS} - Eval Loss: {np.mean(epoch_eval_losses):.4f}, Eval Acc: {np.mean(epoch_eval_accs):.4f}")
+
+        eval_loss_avg = np.mean(epoch_eval_losses)
+        eval_acc_avg = np.mean(epoch_eval_accs)
+        if eval_loss_avg < best_eval_loss:
+            best_eval_loss = eval_loss_avg
+
+
+        print(f"Epoch {epoch+1}/{EPOCHS} - Eval Loss: {eval_loss_avg:.4f}, Eval Acc: {eval_acc_avg:.4f}")
+
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/loss": train_loss_avg,
+            "train/accuracy": train_acc_avg,
+            "eval/loss": eval_loss_avg,
+            "eval/accuracy": eval_acc_avg,
+            "eval/loss_gap": eval_loss_avg - train_loss_avg,  # overfitting signal
+            "best_eval_loss": best_eval_loss,
+        })
+
+
+    wandb.finish()      
+    _, state = nnx.split(model)
+
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    save_path = base_dir / "orbaxexport" / timestamp / model_type
+
+    checkpointer = ocp.StandardCheckpointer()
+    checkpointer.save(save_path, state)
+    checkpointer.wait_until_finished()
 
     print("Training done")
+    
 
 if __name__ == "__main__":
-
     main()

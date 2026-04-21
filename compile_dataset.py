@@ -68,7 +68,9 @@ def main():
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    FEEDBACK_TYPE = config["feedback_type"]
+
+    FEEDBACK_TYPE      = config["feedback_type"]
+    LEARNABILITY_MODE  = config.get("learnability_mode", "dijkstra")  # default to dijkstra
     FEEDBACK_SOURCE = config["feedback_source"]
 
     SUBFOLDER_MAP = {
@@ -76,11 +78,22 @@ def main():
         "learnability_feedback": "learnability",
     }
 
+    VALID_LEARNABILITY_MODES = {"dijkstra", "param"}
+
     if FEEDBACK_TYPE not in SUBFOLDER_MAP:
         raise ValueError(
-            f"Unknown feedback type '{FEEDBACK_TYPE}' in dataset_compilation.yaml. "
+            f"Unknown feedback_type '{FEEDBACK_TYPE}' in config.yaml. "
             f"Must be one of: {list(SUBFOLDER_MAP.keys())}"
         )
+
+    # then validate learnability_mode
+    if FEEDBACK_TYPE == "learnability_feedback":
+        if LEARNABILITY_MODE not in VALID_LEARNABILITY_MODES:
+            raise ValueError(
+                f"Unknown learnability_mode '{LEARNABILITY_MODE}' in config.yaml. "
+                f"Must be one of: {VALID_LEARNABILITY_MODES}"
+            )
+        print(f"Learnability mode: {LEARNABILITY_MODE}")
 
     subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
 
@@ -91,8 +104,13 @@ def main():
     db_path = data_dir / "feedback.db"
 
     # resolve table name based on llm 
-    table_name = resolve_table_name(FEEDBACK_SOURCE)
 
+    if FEEDBACK_TYPE == "learnability_feedback":
+        table_name =  resolve_table_name(FEEDBACK_SOURCE) + f"_{LEARNABILITY_MODE}"  
+    else:
+        table_name = resolve_table_name(FEEDBACK_SOURCE)
+
+                                        
     print(f"Feedback type : {FEEDBACK_TYPE}")
     print(f"Source        : {FEEDBACK_SOURCE} → table '{table_name}'")
     print(f"Database      : {db_path}")
@@ -100,8 +118,9 @@ def main():
     # query completed rows from table
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    
     cursor.execute(f'''
-        SELECT env_1_id, env_2_id, preference, split, x_pct, y_pct, time_ms
+        SELECT env_1_id, env_2_id, preference, split, x_pct, y_pct
         FROM "{table_name}"
         WHERE status = 'completed'
     ''')
@@ -118,7 +137,7 @@ def main():
     def ds_generator():
         skipped = 0
         for row in rows:
-            env_0_id, env_1_id, preference, split, x_pct, y_pct, time_ms = row
+            env_0_id, env_1_id, preference, split, x_pct, y_pct = row
 
             #arr_0_path = arr_dir / f"{env_0_id}.pkl"
             #arr_1_path = arr_dir / f"{env_1_id}.pkl"
@@ -141,16 +160,15 @@ def main():
                 "split": split,
                 "x_pct": x_pct,
                 "y_pct": y_pct,
-                "time_ms": time_ms,
             }
 
         if skipped:
             print(f"Skipped {skipped} rows (missing files)")
 
-    ds = Dataset.from_generator(ds_generator, writer_batch_size=10)
-    ds = ds.with_format("jax")
+    ds = Dataset.from_generator(ds_generator, writer_batch_size=1000)
+    #ds = ds.with_format("jax")
 
-    output_dir = data_dir / f"compiled_{table_name}"
+    output_dir = data_dir / f"compiled_{table_name}_len_{len(rows)}"
     ds.save_to_disk(str(output_dir))
     print(f"\nDataset saved to {output_dir}  ({len(ds)} examples)")
 

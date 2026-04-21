@@ -1,5 +1,0 @@
-# Options:
-#   - difficulty_feedback   : "Which environment looks harder?"
-#   - learnability_feedback : "Which environment looks more learnable?"
-feedback_type: difficulty_feedback 
-

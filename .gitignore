@@ -16,3 +16,12 @@ idea
 .idea/uedrlhf.iml
 .idea/vcs.xml
 .idea/inspectionProfiles/profiles_settings.xml
+.env
+difficulty
+difficulty/*
+slurm_logs/*
+wandb/*
+orbaxexport/*
+data/*
+dataset_balances/*
+
