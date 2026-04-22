@@ -1,0 +1,34 @@
+# ============================================================
+# uedrlhf — Unified Configuration
+# ============================================================
+
+# === Feedback Type ===
+# Options:
+#   - difficulty_feedback   : "Which environment looks harder?"
+#   - learnability_feedback : "Which environment looks more learnable?"
+feedback_type: learnability_feedback
+
+# Only used when feedback_type is learnability_feedback
+# Options:
+#   - dijkstra : pair environments by Dijkstra path length bins
+#   - param    : pair environments by configuration parameter bins (fill, distance)
+learnability_mode: dijkstra
+
+# === Dataset Compilation ===
+# Which feedback source to compile into a training dataset
+# Options:
+#   "human"             → compiles from human_preference_pairs table
+#   "gemini-2.5-flash"  → compiles from gemini_2_5_flash table
+#   "gemini-2.5-pro"    → compiles from gemini_2_5_pro table
+#   (any model name you ran llm_feedback.py with)
+feedback_source: gemini-2.5-flash
+
+# === Training ===
+training:
+  dataset_path: data/learnability/compiled_gemini_2_5_flash_dijkstra_15k
+  batch_size: 512
+  epochs: 50
+  img_size: 64
+  learning_rate: 0.001
+  project_name: "uedrlhf"
+  run_name: 

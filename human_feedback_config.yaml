@@ -1,8 +1,0 @@
-# Optionss
-#   - difficulty_feedback   : "Which environment looks harder?"
-#   - learnability_feedback : "Which environment looks more learnable?"
-feedback_type: learnability_feedback #learnability_feedback
-learnability_mode: dijkstra  # only used when feedback_type is learnability_feedback
-
-
-

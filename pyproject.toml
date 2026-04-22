@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "uedrlhf"
 version = "0.1.0"
@@ -47,4 +51,4 @@ torchvision = { index = "pytorch-cpu" }
 
 
 [tool.setuptools]
-packages = ["standalone_jaxnav", "tests_jaxnav"]
+packages = ["uedrlhf"]

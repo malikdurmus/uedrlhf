@@ -8,20 +8,23 @@ wheels/
 
 # Virtual environments
 .venv
-data/*
-idea
-.idea/.gitignore
-.idea/misc.xml
-.idea/modules.xml
-.idea/uedrlhf.iml
-.idea/vcs.xml
-.idea/inspectionProfiles/profiles_settings.xml
-.env
-difficulty
-difficulty/*
-slurm_logs/*
-wandb/*
-orbaxexport/*
-data/*
-dataset_balances/*
 
+# IDE
+.idea/
+
+# Secrets
+.env
+
+# Data (generated, large)
+data/*
+
+# Outputs (generated)
+outputs/checkpoints/*
+outputs/slurm_logs/*
+outputs/plots/*
+wandb/*
+
+# Old directories (kept for reference during migration, remove later)
+orbaxexport/*
+slurm_logs/*
+dataset_balances/*

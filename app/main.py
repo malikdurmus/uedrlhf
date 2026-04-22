@@ -1,5 +1,4 @@
 import os
-import yaml
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,65 +11,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# config
-BASE_DIR = Path(__file__).resolve().parent.parent
+from uedrlhf.config import FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, FEEDBACK_UI
+from uedrlhf.db import resolve_table_name
 
-config_path = BASE_DIR / "human_feedback_config.yaml"
-with open(config_path, "r") as f:
-    config = yaml.safe_load(f)
-
-FEEDBACK_TYPE     = config["feedback_type"]
-LEARNABILITY_MODE = config.get("learnability_mode", "dijkstra")
-
-SUBFOLDER_MAP = {
-    "difficulty_feedback": "difficulty",
-    "learnability_feedback": "learnability",
-}
-VALID_LEARNABILITY_MODES = {"dijkstra", "param"}
-
-
-if FEEDBACK_TYPE not in SUBFOLDER_MAP:
-    raise ValueError(
-        f"Unknown feedback_type '{FEEDBACK_TYPE}' in config.yaml. "
-        f"Must be one of: {list(SUBFOLDER_MAP.keys())}"
-    )
-
-if FEEDBACK_TYPE == "learnability_feedback":
-    if LEARNABILITY_MODE not in VALID_LEARNABILITY_MODES:
-        raise ValueError(
-            f"Unknown learnability_mode '{LEARNABILITY_MODE}' in config.yaml. "
-            f"Must be one of: {VALID_LEARNABILITY_MODES}"
-        )
-
-
-subfolder = SUBFOLDER_MAP[FEEDBACK_TYPE]
-
-# Resolve table name: mirrors compile_dataset.py logic
-#   difficulty_feedback    → human_preference_pairs
-#   learnability_feedback  → human_preference_pairs_<learnability_mode>
-if FEEDBACK_TYPE == "learnability_feedback":
-    TABLE_NAME = f"human_preference_pairs_{LEARNABILITY_MODE}"
-else:
-    TABLE_NAME = "human_preference_pairs"
-
-# paths
-DATA_DIR = BASE_DIR / "data" / subfolder
-IMAGES_DIR = DATA_DIR / "images"
-
+# Table & database
+TABLE_NAME = resolve_table_name("human")
 DATABASE_URL = f"sqlite:///{DATA_DIR / 'feedback.db'}"
-
-
-# UI text for feedback type
-FEEDBACK_UI = {
-    "difficulty_feedback": {
-        "title": "Difficulty Feedback",
-        "subtitle": "Click the map that represents a harder environment.",
-    },
-    "learnability_feedback": {
-        "title": "Learnability Feedback",
-        "subtitle": "Click the map that represents a more learnable environment.",
-    },
-}
 
 # Database setup
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

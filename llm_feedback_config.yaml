@@ -1,8 +1,0 @@
-# Options:
-#   - difficulty_feedback   : "Which environment looks harder?"
-#   - learnability_feedback : "Which environment looks more learnable?"
-#       learnability_mode:
-#         - dijkstra : pair environments by Dijkstra path length bins
-#         - param    : pair environments by configuration parameter bins (fill, distance)
-feedback_type: difficulty_feedback
-learnability_mode: dijkstra  # only used when feedback_type is learnability_feedback
