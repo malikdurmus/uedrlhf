@@ -42,14 +42,24 @@ if FEEDBACK_TYPE == "learnability_feedback":
         )
 
 # --- Derived paths ---
+DATA_VERSION = CONFIG.get("data_version", "v1")
 SUBFOLDER = SUBFOLDER_MAP[FEEDBACK_TYPE]
-DATA_DIR = BASE_DIR / "data" / SUBFOLDER
+
+if DATA_VERSION == "v2":
+    DATA_DIR = BASE_DIR / "data_v2" / SUBFOLDER
+    DB_PATH = DATA_DIR / "database_v2.db"
+else:
+    DATA_DIR = BASE_DIR / "data" / SUBFOLDER
+    DB_PATH = DATA_DIR / "feedback.db"
+
 IMAGES_DIR = DATA_DIR / "images"
 ARRAYS_DIR = DATA_DIR / "arrays"
-DB_PATH = DATA_DIR / "feedback.db"
 
 # --- Training config ---
 TRAINING = CONFIG.get("training", {})
+
+# --- Vaidity config ---
+VALIDITY = CONFIG.get("validity" , {})
 
 # --- UI text for human feedback app ---
 FEEDBACK_UI = {

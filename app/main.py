@@ -12,11 +12,11 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from uedrlhf.config import FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, FEEDBACK_UI
-from uedrlhf.db import resolve_table_name
+from uedrlhf.db import resolve_table_name 
 
 # Table & database
 TABLE_NAME = resolve_table_name("human")
-DATABASE_URL = f"sqlite:///{DATA_DIR / 'feedback.db'}"
+DATABASE_URL = f"sqlite:///{DATA_DIR / 'database_v2.db'}"
 
 # Database setup
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

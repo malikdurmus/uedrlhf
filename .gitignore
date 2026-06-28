@@ -28,3 +28,8 @@ wandb/*
 orbaxexport/*
 slurm_logs/*
 dataset_balances/*
+
+data_v2/*dataset_1M/
+testing_renderer/
+*.png
+*.gif

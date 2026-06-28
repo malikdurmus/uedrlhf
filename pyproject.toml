@@ -29,6 +29,8 @@ dependencies = [
     "torch",
     "torchvision",
     "numpy>=2.4.4",
+    "craftax>=1.6.1",
+    "xminigrid>=0.9.3",
 ]
 
 [[tool.uv.index]]

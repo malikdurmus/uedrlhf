@@ -99,3 +99,8 @@ def populate_from_llm_pairs(cursor: sqlite3.Cursor, target_table: str):
         SELECT pair_id, env_1_id, env_2_id, split{bin_col}, 'pending'
         FROM "{source_table}"
     """)
+
+
+def create_validity_db(cursor : sqlite3.Cursor , table_name: str):
+    """Create a validity table"""
+    pass

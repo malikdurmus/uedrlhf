@@ -2,11 +2,16 @@
 # uedrlhf — Unified Configuration
 # ============================================================
 
+# === Data Strategy ===
+# Options: "v1" or "v2". Toggles pipeline pathing for databases and images.
+data_version: "v2"
+
+
 # === Feedback Type ===
 # Options:
 #   - difficulty_feedback   : "Which environment looks harder?"
 #   - learnability_feedback : "Which environment looks more learnable?"
-feedback_type: learnability_feedback
+feedback_type: difficulty_feedback
 
 # Only used when feedback_type is learnability_feedback
 # Options:
@@ -21,7 +26,7 @@ learnability_mode: dijkstra
 #   "gemini-2.5-flash"  → compiles from gemini_2_5_flash table
 #   "gemini-2.5-pro"    → compiles from gemini_2_5_pro table
 #   (any model name you ran llm_feedback.py with)
-feedback_source: gemini-2.5-flash
+feedback_source: human
 
 # === Training ===
 training:
