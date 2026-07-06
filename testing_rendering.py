@@ -12,7 +12,7 @@ import xminigrid
 from uedrlhf.jax_renderer import jax_render, build_tile_caches
 
 # ---- Config ----
-NUM_ENVS = 100
+NUM_ENVS = 10
 TILE_SIZE = 32
 OUTPUT_DIR = "/home/d/durmusy/Desktop/GIT/new/uedrlhf/testing_renderer"
 ENV_NAME = "XLand-MiniGrid-R4-9x9"
@@ -40,7 +40,7 @@ print(f"Rendering {NUM_ENVS} environments...")
 render_fn = jax.jit(jax.vmap(
     lambda grid, agent: jax_render(
         grid, agent, tile_cache, agent_tile_cache,
-        view_size=env_params.view_size, tile_size=TILE_SIZE,
+        view_size=env_params.view_size, tile_size=TILE_SIZE, sight_highlight=False
     )
 ))
 

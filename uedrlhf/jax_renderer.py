@@ -135,7 +135,7 @@ def _highlight_mask_jax(
 # Main jittable render function
 # ---------------------------------------------------------------------------
 
-@partial(jax.jit, static_argnames=("view_size", "tile_size"))
+@partial(jax.jit, static_argnames=("view_size", "tile_size", "sight_highlight"))
 def jax_render(
     grid: jax.Array,
     agent: AgentState,
@@ -143,6 +143,7 @@ def jax_render(
     agent_tile_cache: jax.Array,
     view_size: int = 7,
     tile_size: int = 32,
+    sight_highlight: bool = True,
 ) -> jax.Array:
     """Render the full grid as an RGB image, fully jittable.
 
@@ -154,6 +155,7 @@ def jax_render(
         agent_tile_cache: Pre-built cache from build_tile_caches().
         view_size: Agent view size for FOV highlight (default 7).
         tile_size: Pixel size per tile (must match cache, default 32).
+        sight_highlight: Whether to draw the agent's FOV highlight (default True).
 
     Returns:
         img: jax.Array of shape (H*tile_size, W*tile_size, 3), dtype uint8.
@@ -173,19 +175,20 @@ def jax_render(
     agent_tile = agent_tile_cache[agent_flat_idx, agent.direction.astype(jnp.int32)]
     rendered = rendered.at[agent_y, agent_x].set(agent_tile)
 
-    # 4. Apply FOV highlight
-    highlight_mask = _highlight_mask_jax(
-        grid_h, grid_w, agent.position, agent.direction.astype(jnp.int32), view_size
-    )
-    # Expand mask to match tile dimensions: (H, W) → (H, W, 1, 1, 1)
-    mask_expanded = highlight_mask[:, :, None, None, None]
+    # 4. Apply FOV highlight (only if enabled)
+    if sight_highlight:
+        highlight_mask = _highlight_mask_jax(
+            grid_h, grid_w, agent.position, agent.direction.astype(jnp.int32), view_size
+        )
+        # Expand mask to match tile dimensions: (H, W) → (H, W, 1, 1, 1)
+        mask_expanded = highlight_mask[:, :, None, None, None]
 
-    # Blend: img + alpha * (white - img), matching the original highlight_img
-    alpha = 0.2
-    blended = rendered.astype(jnp.float32) + alpha * (255.0 - rendered.astype(jnp.float32))
-    blended = jnp.clip(blended, 0, 255).astype(jnp.uint8)
+        # Blend: img + alpha * (white - img), matching the original highlight_img
+        alpha = 0.2
+        blended = rendered.astype(jnp.float32) + alpha * (255.0 - rendered.astype(jnp.float32))
+        blended = jnp.clip(blended, 0, 255).astype(jnp.uint8)
 
-    rendered = jnp.where(mask_expanded, blended, rendered)
+        rendered = jnp.where(mask_expanded, blended, rendered)
 
     # 5. Reshape (H, W, ts, ts, 3) → (H*ts, W*ts, 3)
     img = rendered.transpose((0, 2, 1, 3, 4))  # (H, ts, W, ts, 3)

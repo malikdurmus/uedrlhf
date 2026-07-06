@@ -1,14 +1,15 @@
 """LLM-based feedback collection for environment preference pairs (single-request mode).
 
+Works with any LLM provider (Gemini, OpenAI, etc.) and any environment backend
+by reading from config.yaml.
+
 Usage:
-    python scripts/feedback/llm_feedback.py --model gemini-2.5-flash
-    python scripts/feedback/llm_feedback.py --model gemini-2.5-flash --api-key YOUR_KEY
-    python scripts/feedback/llm_feedback.py --model gemma-3-27b-it
+    uv run scripts/feedback/llm_feedback.py
+    uv run scripts/feedback/llm_feedback.py --model gemini-2.5-flash
+    uv run scripts/feedback/llm_feedback.py --model gpt-4o
 
 The script creates a dedicated table per model in the same feedback.db,
 so you can compare results across models and against human feedback.
-
-Set your API key via the GEMINI_API_KEY environment variable or --api-key flag.
 """
 
 import os
@@ -18,59 +19,15 @@ import argparse
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timezone
-from dotenv import load_dotenv
 
-from google import genai
-from google.genai import types
-
-from uedrlhf.config import BASE_DIR, FEEDBACK_TYPE, IMAGES_DIR, DB_PATH, PROMPTS
+from uedrlhf.config import (
+    BASE_DIR, ENVIRONMENT, ENV_CONFIG,
+    LLM_PROVIDER, LLM_CONFIG, FEEDBACK_TYPE, IMAGES_DIR, DB_PATH,
+)
 from uedrlhf.db import get_connection, resolve_table_name, create_model_table, populate_from_llm_pairs
-from uedrlhf.utils import choice_to_preference, LLMFeedbackResponse
-
-load_dotenv(BASE_DIR / ".env")
-
-
-def get_llm_preference(
-    client: genai.Client,
-    model_name: str,
-    img_path_1: Path,
-    img_path_2: Path,
-    prompt: str,
-) -> dict:
-    """Send two images to the LLM and return parsed JSON response + time_ms."""
-    img1_bytes = img_path_1.read_bytes()
-    img2_bytes = img_path_2.read_bytes()
-
-    t0 = time.perf_counter()
-
-    response = client.models.generate_content(
-        model=model_name,
-        contents=[
-            "Image A (Left):",
-            types.Part.from_bytes(data=img1_bytes, mime_type="image/png"),
-            "Image B (Right):",
-            types.Part.from_bytes(data=img2_bytes, mime_type="image/png"),
-            prompt,
-        ],
-        config={
-            "response_mime_type": "application/json",
-            "response_json_schema": LLMFeedbackResponse.model_json_schema(),
-        },
-    )
-
-    time_ms = (time.perf_counter() - t0) * 1000
-    raw = response.text
-
-    parsed = LLMFeedbackResponse.model_validate_json(raw)
-    preference = choice_to_preference(parsed.choice)
-
-    return {
-        "preference": preference,
-        "x_pct": round(parsed.x_pct, 2),
-        "y_pct": round(parsed.y_pct, 2),
-        "time_ms": round(time_ms, 1),
-        "raw": raw,
-    }
+from uedrlhf.utils import choice_to_preference
+from uedrlhf.environments import get_env_backend
+from uedrlhf.llm_providers import get_llm_provider
 
 
 def main():
@@ -79,13 +36,8 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default="gemini-2.5-flash",
-        help="Gemini model name (default: gemini-2.5-flash)",
-    )
-    parser.add_argument(
-        "--api-key",
         default=None,
-        help="Gemini API key (or set GEMINI_API_KEY env var)",
+        help="Override the model name from config (e.g. gemini-2.5-flash, gpt-4o)",
     )
     parser.add_argument(
         "--delay",
@@ -95,18 +47,24 @@ def main():
     )
     args = parser.parse_args()
 
-    # API key
-    api_key = args.api_key or os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("Error: Set GEMINI_API_KEY env var or pass --api-key")
-        sys.exit(1)
+    # Use model from args or fall back to config
+    provider_config = dict(LLM_CONFIG)
+    if args.model:
+        provider_config["model"] = args.model
 
-    client = genai.Client(api_key=api_key)
-    table_name = resolve_table_name(args.model)
-    prompt = PROMPTS[FEEDBACK_TYPE]
+    # Initialize provider and get prompt
+    provider = get_llm_provider(LLM_PROVIDER, provider_config)
+    backend = get_env_backend(ENVIRONMENT, ENV_CONFIG)
+    prompts = backend.get_prompts()
+    prompt = prompts[FEEDBACK_TYPE]
 
+    model_name = provider_config.get("model", LLM_PROVIDER)
+    table_name = resolve_table_name(model_name)
+
+    print(f"Environment   : {ENVIRONMENT}")
+    print(f"LLM Provider  : {LLM_PROVIDER}")
+    print(f"Model         : {model_name}")
     print(f"Feedback type : {FEEDBACK_TYPE}")
-    print(f"Model         : {args.model}")
     print(f"Table         : {table_name}")
     print(f"Database      : {DB_PATH}")
     print()
@@ -146,16 +104,14 @@ def main():
             continue
 
         try:
-            # Gemini might have some positional bias, so switch the labels half the time
+            # Random swap to counteract positional bias
             swapped = np.random.random() > 0.5
             if swapped:
                 img_a, img_b = img_2, img_1
             else:
                 img_a, img_b = img_1, img_2
 
-            result = get_llm_preference(
-                client, args.model, img_a, img_b, prompt
-            )
+            result = provider.get_preference(img_a, img_b, prompt)
             raw_pref = result["preference"]
             if swapped and raw_pref != 0.5:
                 raw_pref = 1 - raw_pref
@@ -193,7 +149,7 @@ def main():
 
         # Rate limiting
         if i < len(pending) - 1:
-            pass  # time.sleep(args.delay)
+            time.sleep(args.delay)
 
     conn.close()
 

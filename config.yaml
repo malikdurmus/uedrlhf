@@ -2,6 +2,16 @@
 # uedrlhf — Unified Configuration
 # ============================================================
 
+# === Environment ===
+# Which environment to generate/render.
+# Options: "jaxnav", "xland_minigrid"
+environment: xland_minigrid
+
+# === LLM Provider ===
+# Which LLM API to use for feedback collection.
+# Options: "gemini", "openwebui"
+llm_provider: openwebui
+
 # === Data Strategy ===
 # Options: "v1" or "v2". Toggles pipeline pathing for databases and images.
 data_version: "v2"
@@ -28,6 +38,29 @@ learnability_mode: dijkstra
 #   (any model name you ran llm_feedback.py with)
 feedback_source: human
 
+# === Per-Environment Settings ===
+jaxnav:
+  num_agents: 1
+  map_height: 11.0
+  map_width: 11.0
+  cell_size: 1.0
+  img_size: 120
+
+xland_minigrid:
+  env_id: "XLand-MiniGrid-R4-9x9"
+  tile_size: 32
+  view_size: 7
+
+# === Per-Provider Settings ===
+gemini:
+  model: "gemini-2.5-flash"
+  api_key_env: "GEMINI_API_KEY"
+
+openwebui:
+  model: "qwen3.6:27b"
+  api_key_env: "OPENWEBUI_API_KEY"
+  base_url: "https://llm.mobile.ifi.lmu.de"
+
 # === Training ===
 training:
   dataset_path: data/learnability/compiled_gemini_2_5_flash_dijkstra_15k
@@ -36,4 +69,4 @@ training:
   img_size: 64
   learning_rate: 0.001
   project_name: "uedrlhf"
-  run_name: 
+  run_name:
