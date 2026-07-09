@@ -36,7 +36,7 @@ learnability_mode: dijkstra
 #   "gemini-2.5-flash"  → compiles from gemini_2_5_flash table
 #   "gemini-2.5-pro"    → compiles from gemini_2_5_pro table
 #   (any model name you ran llm_feedback.py with)
-feedback_source: human
+feedback_source: human #"qwen3.6:27b" # only used at compile time
 
 # === Per-Environment Settings ===
 jaxnav:
@@ -47,7 +47,7 @@ jaxnav:
   img_size: 120
 
 xland_minigrid:
-  env_id: "XLand-MiniGrid-R4-9x9"
+  env_id: "MiniGrid-BlockedUnlockPickUp"
   tile_size: 32
   view_size: 7
 
@@ -57,7 +57,7 @@ gemini:
   api_key_env: "GEMINI_API_KEY"
 
 openwebui:
-  model: "qwen3.6:27b"
+  model: "gemma4:e2b"
   api_key_env: "OPENWEBUI_API_KEY"
   base_url: "https://llm.mobile.ifi.lmu.de"
 

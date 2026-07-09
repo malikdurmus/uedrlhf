@@ -9,7 +9,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from uedrlhf.environments.base import EnvBackend
-from uedrlhf.config import JSON_INSTRUCTION
 
 
 class XLandMiniGridBackend(EnvBackend):
@@ -88,21 +87,13 @@ class XLandMiniGridBackend(EnvBackend):
         }
 
     def get_prompts(self) -> dict[str, str]:
-        return {
-            "difficulty_feedback": (
-                "You are evaluating two grid-world environments for an RL agent. "
-                "Each image shows a top-down view of a MiniGrid environment with coloured tiles, "
-                "objects (keys, doors, balls), walls, and an agent (red triangle) that must reach a goal.\n\n"
-                "Your task: Which environment is HARDER for the agent to solve?\n\n"
-                "Consider factors like:\n"
-                "- Number and complexity of objects and rules (keys needed to open doors, etc.)\n"
-                "- Grid size and maze complexity\n"
-                "- Distance and obstacles between the agent and the goal\n"
-                "- Whether multiple steps of reasoning are needed (pick up key → open door → reach goal)\n\n"
-                "Choose:\n"
-                "  A  — if Image A (left) is harder\n"
-                "  B  — if Image B (right) is harder\n"
-                "  TIE — if they are equally difficult"
-                + JSON_INSTRUCTION
-            ),
-        }
+        from uedrlhf.environments.xland_prompts import get_xland_prompt
+        # Build the dict dynamically — only include feedback types that have a prompt
+        prompts = {}
+        for ftype in ("difficulty_feedback", "learnability_feedback"):
+            try:
+                prompts[ftype] = get_xland_prompt(self.env_id, ftype)
+            except KeyError:
+                pass
+        return prompts
+

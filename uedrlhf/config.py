@@ -56,11 +56,13 @@ ENV_CONFIG = CONFIG.get(ENVIRONMENT, {})
 # === Per-provider config ===
 LLM_CONFIG = CONFIG.get(LLM_PROVIDER, {})
 
-# === Data paths (scoped by environment and feedback type) ===
+# === Data paths (scoped by environment, env_id, and feedback type) ===
+ENV_ID = ENV_CONFIG.get("env_id", ENVIRONMENT)
+
 if DATA_VERSION == "v1":
     DATA_DIR = BASE_DIR / "data" / FEEDBACK_TYPE
 else:
-    DATA_DIR = BASE_DIR / "data_v2" / ENVIRONMENT / FEEDBACK_TYPE
+    DATA_DIR = BASE_DIR / "data_v2" / ENVIRONMENT / ENV_ID / FEEDBACK_TYPE
 
 IMAGES_DIR = DATA_DIR / "images"
 ARRAYS_DIR = DATA_DIR / "arrays"
@@ -76,8 +78,8 @@ Respond ONLY with the following JSON — no other text:
 
 {
   "choice": "<A | B | TIE>",
-  "x_pct": <float 0-100: how much harder/more learnable X is>,
-  "y_pct": <float 0-100: how much harder/more learnable Y is>,
+  "x_pct": <float 0-100 representing the exact horizontal focus point in the image>,
+  "y_pct": <float 0-100 representing the exact vertical focus point in the image>,
   "reasoning": "<one sentence>"
 }
 """

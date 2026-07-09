@@ -98,8 +98,8 @@ class JaxNavBackend(EnvBackend):
                 "- Length and complexity of the path from start to goal\n"
                 "- Whether the path requires sharp turns or backtracking\n\n"
                 "Choose:\n"
-                "  A  — if Image A (left) is harder\n"
-                "  B  — if Image B (right) is harder\n"
+                "  A  — if Image A is harder\n"
+                "  B  — if Image B is harder\n"
                 "  TIE — if they are equally difficult"
                 + JSON_INSTRUCTION
             ),
@@ -112,8 +112,8 @@ class JaxNavBackend(EnvBackend):
                 "- Provides meaningful challenge that forces the agent to learn\n"
                 "- Has clear, reachable goals with non-trivial paths\n\n"
                 "Choose:\n"
-                "  A  — if Image A (left) is more learnable\n"
-                "  B  — if Image B (right) is more learnable\n"
+                "  A  — if Image A is more learnable\n"
+                "  B  — if Image B is more learnable\n"
                 "  TIE — if they are equally learnable"
                 + JSON_INSTRUCTION
             ),

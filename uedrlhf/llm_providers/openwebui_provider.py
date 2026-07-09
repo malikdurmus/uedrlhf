@@ -91,15 +91,26 @@ class OpenWebUIProvider(LLMProvider):
             json=payload
         )
         
-        # Raise an exception if the request failed (e.g. 500, 401)
+        # Raise an exception if the request failed
         response.raise_for_status()
 
         time_ms = (time.perf_counter() - t0) * 1000
         json_data = response.json()
         raw = json_data["choices"][0]["message"]["content"]
 
+
+        # --- Clean markdown so that it is pure json ##
+        raw_clean = raw.strip()
+        # Find the first '{' and the last '}' to extract pure JSON
+        start_idx = raw_clean.find('{')
+        end_idx = raw_clean.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1:
+            raw_clean = raw_clean[start_idx:end_idx+1]
+        # -----------------------------------       ##
+
         try:
-            parsed = LLMFeedbackResponse.model_validate_json(raw)
+            parsed = LLMFeedbackResponse.model_validate_json(raw_clean)
         except Exception as e:
             print(f"Failed to parse JSON response: {raw}")
             raise e

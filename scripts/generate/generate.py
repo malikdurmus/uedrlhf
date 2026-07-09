@@ -25,10 +25,13 @@ from uedrlhf.config import ENVIRONMENT, ENV_CONFIG, FEEDBACK_TYPE, DATA_DIR, IMA
 from uedrlhf.db import get_connection, create_pair_table, resolve_table_name
 from uedrlhf.environments import get_env_backend
 
-NUM_TRAIN_PAIRS = 7000
-NUM_TEST_PAIRS = 700
+NUM_TRAIN_PAIRS = 20000
+NUM_TEST_PAIRS = 2000
 TOTAL_PAIRS = NUM_TRAIN_PAIRS + NUM_TEST_PAIRS
-TOTAL_ENVS = TOTAL_PAIRS * 2
+
+# How many pairs to generate + render per GPU batch (2 envs per pair).
+# 5000 pairs = 10 000 envs ≈ 2 GB on a 9×9 grid with tile_size=32.
+BATCH_PAIRS = 5000
 
 
 def main():
@@ -51,68 +54,88 @@ def main():
     backend = get_env_backend(ENVIRONMENT, ENV_CONFIG)
     backend.create_env()
 
-    # Generate all environment states at once
     seed = int(time.time())
     print(f"Using PRNG seed: {seed}")
     rng = jax.random.PRNGKey(seed)
 
-    print(f"Generating {TOTAL_ENVS} environments...")
-    states = backend.generate_states(rng, TOTAL_ENVS)
+    num_batches = (TOTAL_PAIRS + BATCH_PAIRS - 1) // BATCH_PAIRS
+    print(f"Total pairs: {TOTAL_PAIRS}  |  Batch size: {BATCH_PAIRS} pairs  |  Batches: {num_batches}")
 
-    # Render all images in one batch
-    print("Rendering all environments...")
-    all_images = backend.render_batch(states)
-    print(f"Rendered batch shape: {all_images.shape}")
+    global_pair_idx = 0
 
-    # Create pairs and save
-    for pair_idx in range(TOTAL_PAIRS):
-        split = "train" if pair_idx < NUM_TRAIN_PAIRS else "test"
+    for batch_idx in range(num_batches):
+        batch_start = batch_idx * BATCH_PAIRS
+        batch_end = min(batch_start + BATCH_PAIRS, TOTAL_PAIRS)
+        batch_pair_count = batch_end - batch_start
+        batch_env_count = batch_pair_count * 2
 
-        while True:
-            id_1 = f"{split}_{pair_idx:03d}_A_{uuid.uuid4().hex[:8]}"
-            id_2 = f"{split}_{pair_idx:03d}_B_{uuid.uuid4().hex[:8]}"
-            if not (IMAGES_DIR / f"{id_1}.png").exists() and not (IMAGES_DIR / f"{id_2}.png").exists():
-                break
+        print(f"\n=== Batch {batch_idx + 1}/{num_batches}: pairs {batch_start}–{batch_end - 1} ({batch_env_count} envs) ===")
 
-        idx_1 = pair_idx * 2
-        idx_2 = pair_idx * 2 + 1
+        # Split a fresh key for this batch
+        rng, batch_rng = jax.random.split(rng)
 
-        for env_id, arr_idx in [(id_1, idx_1), (id_2, idx_2)]:
-            # Extract single state from the batch
-            state = jax.tree_util.tree_map(lambda x: x[arr_idx], states)
+        # Generate states for this batch
+        states = backend.generate_states(batch_rng, batch_env_count)
 
-            # Serialize and save state
-            state_dict = backend.state_to_dict(state)
-            with open(ARRAYS_DIR / f"{env_id}.pkl", "wb") as f:
-                pickle.dump(state_dict, f)
+        # Render this batch
+        print(f"  Rendering {batch_env_count} environments...")
+        batch_images = backend.render_batch(states)
+        print(f"  Rendered batch shape: {batch_images.shape}")
 
-            # Save pre-rendered image
-            img_pil = Image.fromarray(all_images[arr_idx])
-            img_pil.save(IMAGES_DIR / f"{env_id}.png")
+        # Save pairs from this batch
+        for local_pair_idx in range(batch_pair_count):
+            split = "train" if global_pair_idx < NUM_TRAIN_PAIRS else "test"
 
-        # Insert pair into both tables
-        cursor.execute(f"""
-            INSERT INTO "{human_table}" (env_1_id, env_2_id, split, status) 
-            VALUES (?, ?, ?, ?)
-        """, (id_1, id_2, split, "pending"))
+            while True:
+                id_1 = f"{split}_{global_pair_idx:05d}_A_{uuid.uuid4().hex[:8]}"
+                id_2 = f"{split}_{global_pair_idx:05d}_B_{uuid.uuid4().hex[:8]}"
+                if not (IMAGES_DIR / f"{id_1}.png").exists() and not (IMAGES_DIR / f"{id_2}.png").exists():
+                    break
 
-        cursor.execute(f"""
-            INSERT INTO "{llm_table}" (env_1_id, env_2_id, split, status) 
-            VALUES (?, ?, ?, ?)
-        """, (id_1, id_2, split, "pending"))
+            env_idx_1 = local_pair_idx * 2
+            env_idx_2 = local_pair_idx * 2 + 1
 
-        # Progress marker
-        if (pair_idx + 1) % 500 == 0:
-            print(f"Generated {pair_idx + 1} / {TOTAL_PAIRS} pairs...")
-            conn.commit()
+            for env_id, arr_idx in [(id_1, env_idx_1), (id_2, env_idx_2)]:
+                # Extract single state from the batch
+                state = jax.tree_util.tree_map(lambda x: x[arr_idx], states)
 
-    conn.commit()
+                # Serialize and save state
+                state_dict = backend.state_to_dict(state)
+                with open(ARRAYS_DIR / f"{env_id}.pkl", "wb") as f:
+                    pickle.dump(state_dict, f)
+
+                # Save pre-rendered image
+                img_pil = Image.fromarray(batch_images[arr_idx])
+                img_pil.save(IMAGES_DIR / f"{env_id}.png")
+
+            # Insert pair into both tables
+            cursor.execute(f"""
+                INSERT INTO "{human_table}" (env_1_id, env_2_id, split, status) 
+                VALUES (?, ?, ?, ?)
+            """, (id_1, id_2, split, "pending"))
+
+            cursor.execute(f"""
+                INSERT INTO "{llm_table}" (env_1_id, env_2_id, split, status) 
+                VALUES (?, ?, ?, ?)
+            """, (id_1, id_2, split, "pending"))
+
+            global_pair_idx += 1
+
+            if global_pair_idx % 500 == 0:
+                print(f"  Saved {global_pair_idx} / {TOTAL_PAIRS} pairs...")
+
+        # Commit after each batch and let JAX free GPU memory
+        conn.commit()
+        del states, batch_images
+        print(f"  Batch {batch_idx + 1} committed.")
+
     conn.close()
 
-    print(f"[{ENVIRONMENT} / {FEEDBACK_TYPE}] Done! Saved to {DATA_DIR}/")
+    print(f"\n[{ENVIRONMENT} / {FEEDBACK_TYPE}] Done! Saved to {DATA_DIR}/")
     print(f"Total pairs: {TOTAL_PAIRS}")
     print(f"Tables: {human_table}, {llm_table}")
 
 
 if __name__ == "__main__":
     main()
+
