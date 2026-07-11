@@ -36,7 +36,7 @@ learnability_mode: dijkstra
 #   "gemini-2.5-flash"  → compiles from gemini_2_5_flash table
 #   "gemini-2.5-pro"    → compiles from gemini_2_5_pro table
 #   (any model name you ran llm_feedback.py with)
-feedback_source: human #"qwen3.6:27b" # only used at compile time
+feedback_source: "gemma4:e2b" # only used at compile time
 
 # === Per-Environment Settings ===
 jaxnav:
@@ -63,10 +63,10 @@ openwebui:
 
 # === Training ===
 training:
-  dataset_path: data/learnability/compiled_gemini_2_5_flash_dijkstra_15k
-  batch_size: 512
+  dataset_path: data_v2/xland_minigrid/MiniGrid-BlockedUnlockPickUp/difficulty_feedback/compiled_gemma4_e2b_len_21992
+  batch_size: 128
   epochs: 50
-  img_size: 64
+  img_size: 9999 #this should be removed
   learning_rate: 0.001
-  project_name: "uedrlhf"
-  run_name:
+  project_name: "gemma4e2b-direct"
+  run_name: 
