@@ -4,9 +4,14 @@ Environment-specific logic (rasterization, state serialization) lives
 in the respective backend modules under uedrlhf/environments/.
 """
 
+import pickle
 import base64
 from pathlib import Path
 from pydantic import BaseModel
+from PIL import Image
+import numpy as np
+
+RESIZE = (352,192) #(64, 64) TODO: make this config dependent we use 64x64 for jaxnav but for xlandminigrid blocked unlockpickup env 64x64 produces suboptimal images
 
 
 # === Pydantic model for structured LLM feedback response ===
@@ -44,3 +49,15 @@ def choice_to_preference(choice: str) -> float:
         return 0.5
     else:
         raise ValueError(f"Unexpected choice value: '{choice}'. Expected 'A', 'B', or 'TIE'.")
+
+
+def load_image_as_nparray(file_path: Path, size: tuple = RESIZE) -> np.ndarray:
+    """Load an image, resize it, and return as a float32 numpy array."""
+    img = Image.open(file_path).resize(size).convert("RGB")
+    return np.array(img).astype(np.float32)
+
+
+def load_array(file_path: Path):
+    """Load a pickled array from disk."""
+    with open(file_path, "rb") as f:
+        return pickle.load(f)

@@ -69,7 +69,7 @@ ARRAYS_DIR = DATA_DIR / "arrays"
 DB_PATH = DATA_DIR / "database_v2.db"
 
 # === Training config ===
-TRAINING_CONFIG = CONFIG.get("training", {})
+TRAINING = CONFIG.get("training", {})
 
 # === JSON instruction suffix (appended to all LLM prompts) ===
 JSON_INSTRUCTION = """

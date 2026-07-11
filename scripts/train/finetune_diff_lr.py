@@ -146,7 +146,7 @@ def main():
     print(f"Loading pretrained weights from: {PRETRAINED_CHECKPOINT_PATH}")
     checkpointer = ocp.StandardCheckpointer()
     _, state_def = nnx.split(model)
-    restored_state = checkpointer.restore(PRETRAINED_CHECKPOINT_PATH, item=state_def)
+    restored_state = checkpointer.restore(PRETRAINED_CHECKPOINT_PATH, state_def)
     nnx.update(model, restored_state)
     print("Pretrained weights grafted.")
 

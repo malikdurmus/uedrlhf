@@ -12,8 +12,11 @@ import threading
 import numpy as np
 from functools import partial
 from torch.utils.data import DataLoader
+import multiprocessing
+
+multiprocessing.set_start_method('spawn', force=True)
+
 import wandb
-import jax
 import jax.numpy as jnp
 from flax import nnx
 import optax
@@ -21,10 +24,10 @@ import orbax.checkpoint as ocp
 from datasets import load_from_disk
 
 from uedrlhf.config import BASE_DIR, TRAINING
-from uedrlhf.networks import CNN
+from uedrlhf.networks import LearnabilityResNet
 
 # Training config from config.yaml
-IMG_SIZE = TRAINING.get("img_size", 64)
+IMG_SIZE = TRAINING.get("img_size", 64) # This is unnecesary No use other then loggind and it does not depend on the compiled dataset so this might have a dangling reference
 BATCH_SIZE = TRAINING.get("batch_size", 512)
 EPOCHS = TRAINING.get("epochs", 50)
 LEARNING_RATE = TRAINING.get("learning_rate", 1e-3)
@@ -32,13 +35,17 @@ DATASET_PATH = TRAINING.get("dataset_path", "data/difficulty/compiled_gemini_2_5
 MODEL_TYPE = DATASET_PATH.split("/", 1)[-1] if "/" in DATASET_PATH else DATASET_PATH
 RUN_NAME = f"cnn-{MODEL_TYPE}" if TRAINING.get("run_name") == None else TRAINING.get("run_name")  
 PROJECT_NAME = TRAINING.get("project_name" , "uedrlhf")
+MODE = TRAINING.get("mode", "online")
+print(MODEL_TYPE)
 x = 14 
-@nnx.jit
-def loss_fn(model: CNN, data: tuple):
+
+
+@nnx.jit(static_argnames='deterministic')
+def loss_fn(model: LearnabilityResNet, data: tuple, deterministic: bool = False):
     img0, img1, preferences = data
     combined_inputs = jnp.concatenate([img0, img1], axis=0)
 
-    scores = model(combined_inputs)
+    scores = model(combined_inputs, deterministic=deterministic)
     scores_input0, scores_input1 = jnp.split(scores, 2, axis=0)
 
     logits = (scores_input0 - scores_input1)
@@ -48,7 +55,7 @@ def loss_fn(model: CNN, data: tuple):
 
 
 @nnx.jit
-def train_step(model: CNN, optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch: tuple):
+def train_step(model: LearnabilityResNet, optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch: tuple):
     grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
     (loss, logits), grads = grad_fn(model=model, data=batch)
 
@@ -62,8 +69,8 @@ def train_step(model: CNN, optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch: tupl
 
 
 @nnx.jit
-def eval_step(model: CNN, batch: tuple):
-    loss, logits = loss_fn(model, batch)
+def eval_step(model: LearnabilityResNet, batch: tuple):
+    loss, logits = loss_fn(model, batch, deterministic=True)
 
     labels = batch[-1]
     predictions = (logits > 0).astype(jnp.float32)
@@ -108,7 +115,8 @@ def main():
             "learning_rate": LEARNING_RATE,
             "optimizer": "adam",
             "dropout": 0.025,
-        }
+        },
+        mode = MODE
     )
 
     ds = load_from_disk(DATASET_PATH)
@@ -132,11 +140,9 @@ def main():
         num_workers=4)
 
     rngs = nnx.Rngs(0)
-    model = CNN(rngs=rngs)
+    model = LearnabilityResNet(rngs=rngs)
     optimizer = nnx.Optimizer(model, optax.adam(learning_rate=LEARNING_RATE), wrt=nnx.Param)
 
-    train_model = nnx.view(model, deterministic=False, use_running_average=False)
-    eval_model = nnx.view(model, deterministic=True, use_running_average=False)
 
     best_eval_loss = float("inf")
 
@@ -202,3 +208,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
