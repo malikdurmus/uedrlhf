@@ -61,3 +61,8 @@ def load_array(file_path: Path):
     """Load a pickled array from disk."""
     with open(file_path, "rb") as f:
         return pickle.load(f)
+
+
+import jax
+import jax.numpy as jnp
+

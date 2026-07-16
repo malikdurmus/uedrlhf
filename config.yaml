@@ -46,6 +46,7 @@ jaxnav:
   cell_size: 1.0
   img_size: 120
   resize: [64, 64]
+  only_solvable: true
 
 xland_minigrid:
   env_id: "MiniGrid-BlockedUnlockPickUp"

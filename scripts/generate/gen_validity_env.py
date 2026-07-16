@@ -23,7 +23,8 @@ from datasets import Dataset, Features, Array2D, Array3D, Value, Image, Sequence
 from datasets import concatenate_datasets, load_from_disk
 
 from jaxmarl.environments.jaxnav.jaxnav_env import JaxNav
-from uedrlhf.utils import get_jaxnav_rasterizer
+from uedrlhf.config import ARRAYS_DIR, IMAGES_DIR, DATA_VERSION, DATA_DIR
+from uedrlhf.jax_renderer import get_jaxnav_rasterizer
 
 
 def parse_args():

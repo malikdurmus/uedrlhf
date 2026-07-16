@@ -20,21 +20,15 @@ class JaxNavBackend(EnvBackend):
         self.map_width = config.get("map_width", 11.0)
         self.cell_size = config.get("cell_size", 1.0)
         self.img_size = config.get("img_size", 120)
+        self.only_solvable = config.get("only_solvable", False)
 
         self._env = None
         self._rasterizer = None
 
     def create_env(self):
         from jaxmarl.environments.jaxnav.jaxnav_env import JaxNav
-        from omegaconf import OmegaConf
 
-        cfg = OmegaConf.create({
-            "num_agents": self.num_agents,
-            "map_height": self.map_height,
-            "map_width": self.map_width,
-            "cell_size": self.cell_size,
-        })
-        self._env = JaxNav(num_agents=cfg.num_agents, **cfg)
+        self._env = JaxNav(num_agents=self.num_agents)
         return self._env, None
 
     def _get_rasterizer(self):
@@ -42,25 +36,29 @@ class JaxNavBackend(EnvBackend):
         if self._rasterizer is not None:
             return self._rasterizer
 
-        from jaxmarl.environments.jaxnav.jaxnav_viz import rasterize_jaxnav
+        from uedrlhf.jax_renderer import get_jaxnav_rasterizer
 
-        cell_size = self.cell_size
-        img_size = self.img_size
-        h = int(self.map_height / cell_size) + 2
-        w = int(self.map_width / cell_size) + 2
-
-        @jax.jit
-        def _rasterize(state):
-            return rasterize_jaxnav(state, h, w, img_size)
-
-        self._rasterizer = _rasterize
+        self._rasterizer = get_jaxnav_rasterizer(
+            img_height=self.img_size,
+            img_width=self.img_size,
+            map_height=self.map_height,
+            map_width=self.map_width,
+            cell_size=self.cell_size
+        )
         return self._rasterizer
 
     def generate_states(self, rng, num_envs):
         if self._env is None:
             self.create_env()
         keys = jax.random.split(rng, num_envs)
-        reset_fn = jax.vmap(self._env.reset_env)
+        
+        solvability = "solvable" if self.only_solvable else "both"
+        
+        def reset_state_only(key):
+            obs, state = self._env.reset(key, solvability=solvability)
+            return state
+            
+        reset_fn = jax.vmap(reset_state_only)
         states = reset_fn(keys)
         return states
 

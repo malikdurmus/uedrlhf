@@ -22,7 +22,7 @@ from jaxmarl.environments.jaxnav.jaxnav_env import JaxNav
 
 from uedrlhf.config import FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, ARRAYS_DIR, DATA_VERSION
 from uedrlhf.db import get_connection, create_pair_table, resolve_table_name
-from uedrlhf.utils import get_jaxnav_rasterizer
+from uedrlhf.jax_renderer import get_jaxnav_rasterizer
 
 # Fast fail to ensure V2 is active
 if DATA_VERSION != "v2":
