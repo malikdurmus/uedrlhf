@@ -6,6 +6,7 @@ Usage:
 
 import time
 import os
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 from pathlib import Path
 from queue import Queue
 import threading
@@ -13,8 +14,6 @@ import numpy as np
 from functools import partial
 from torch.utils.data import DataLoader
 import multiprocessing
-
-multiprocessing.set_start_method('spawn', force=True)
 
 import wandb
 import jax.numpy as jnp
@@ -37,10 +36,9 @@ RUN_NAME = f"cnn-{MODEL_TYPE}" if TRAINING.get("run_name") == None else TRAINING
 PROJECT_NAME = TRAINING.get("project_name" , "uedrlhf")
 MODE = TRAINING.get("mode", "online")
 print(MODEL_TYPE)
-x = 14 
+print(BATCH_SIZE)
 
 
-@nnx.jit(static_argnames='deterministic')
 def loss_fn(model: LearnabilityResNet, data: tuple, deterministic: bool = False):
     img0, img1, preferences = data
     combined_inputs = jnp.concatenate([img0, img1], axis=0)
@@ -48,7 +46,7 @@ def loss_fn(model: LearnabilityResNet, data: tuple, deterministic: bool = False)
     scores = model(combined_inputs, deterministic=deterministic)
     scores_input0, scores_input1 = jnp.split(scores, 2, axis=0)
 
-    logits = (scores_input0 - scores_input1)
+    logits = (scores_input1 - scores_input0)
     batch_loss = optax.sigmoid_binary_cross_entropy(logits=logits, labels=preferences)
     loss = jnp.mean(batch_loss)
     return loss, logits
@@ -84,10 +82,18 @@ def prefetch_to_gpu(dataloader, queue_size=2):
 
     def producer():
         for batch_dict in dataloader:
+            i0 = np.array(batch_dict['env_0_image'], dtype=np.float32)
+            i1 = np.array(batch_dict['env_1_image'], dtype=np.float32)
+            
+            # Auto-normalize older datasets that are [0, 255] instead of [0, 1]
+            if np.max(i0) > 2.0:
+                i0 = i0 / 255.0
+                i1 = i1 / 255.0
+                
             batch = (
-                jnp.array(batch_dict['env_0_image']),
-                jnp.array(batch_dict['env_1_image']),
-                jnp.array(batch_dict['preference'])
+                jnp.array(i0),
+                jnp.array(i1),
+                jnp.array(batch_dict['preference'], dtype=jnp.float32)
             )
             queue.put(batch)
 
@@ -145,6 +151,11 @@ def main():
 
 
     best_eval_loss = float("inf")
+    
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    run_id = wandb.run.id if wandb.run is not None else timestamp
+    checkpoint_dir = BASE_DIR / "outputs" / "checkpoints" / f"cnn_{MODEL_TYPE}_{run_id}"
+    checkpointer = ocp.StandardCheckpointer()
 
     # ----- TRAINING & EVAL LOOP
     print("Starting training...")
@@ -193,15 +204,14 @@ def main():
             "best_eval_loss": best_eval_loss,
         })
 
+        # Save checkpoint for this epoch
+        state = nnx.state(model)
+        save_path = checkpoint_dir / f"epoch_{epoch+1}"
+        checkpointer.save(save_path.resolve(), state)
+        checkpointer.wait_until_finished()
+        print(f"Checkpoint saved to {save_path}")
+
     wandb.finish()
-    _, state = nnx.split(model)
-
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    save_path = BASE_DIR / "outputs" / "checkpoints" / timestamp / MODEL_TYPE
-
-    checkpointer = ocp.StandardCheckpointer()
-    checkpointer.save(save_path, state)
-    checkpointer.wait_until_finished()
 
     print("Training done")
 

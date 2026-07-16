@@ -1,10 +1,12 @@
 #!/bin/bash
 # slurm
 #SBATCH --job-name=compileds
-#SBATCH --partition=All
+#SBATCH --partition=Krater
 #SBATCH --output=outputs/slurm_logs/%j_out.log # %j will be the Job ID
 #SBATCH --error=outputs/slurm_logs/%j_err.log
 
+export HF_DATASETS_CACHE="/home/d/durmusy/BIG/hf_cache"
+export HF_HOME="/home/d/durmusy/BIG/hf_cache"
 mkdir -p ../outputs/slurm_logs
 cd ~/Desktop/GIT/new/uedrlhf
 source .venv/bin/activate

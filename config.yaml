@@ -45,11 +45,13 @@ jaxnav:
   map_width: 11.0
   cell_size: 1.0
   img_size: 120
+  resize: [64, 64]
 
 xland_minigrid:
   env_id: "MiniGrid-BlockedUnlockPickUp"
   tile_size: 32
   view_size: 7
+  resize: [88, 48]
 
 # === Per-Provider Settings ===
 gemini:
@@ -63,7 +65,7 @@ openwebui:
 
 # === Training ===
 training:
-  dataset_path: data_v2/xland_minigrid/MiniGrid-BlockedUnlockPickUp/difficulty_feedback/compiled_gemma4_e2b_len_21992
+  dataset_path: data/difficulty/compiled_gemini_2_5_flash_20k
   batch_size: 128
   epochs: 50
   img_size: 9999 #this should be removed

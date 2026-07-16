@@ -34,7 +34,7 @@ EPOCHS = 30
 LEARNING_RATE = 1e-3
 DATASET_PATH = str(BASE_DIR / "dataset_1M" / "dataset")
 RUN_NAME = "resnet-pretrain-solvability_f1"
-PROJECT_NAME = "uedrlhf"
+PROJECT_NAME = "uedrlhf_TRAINING-solvabilitypretrain"
 # ==========================================
 
 
@@ -61,7 +61,8 @@ def train_step(model: LearnabilityResNet, optimizer: nnx.Optimizer, rngs: nnx.Rn
     tp = jnp.sum((predictions == 1) & (labels == 1))
     fp = jnp.sum((predictions == 1) & (labels == 0))
     fn = jnp.sum((predictions == 0) & (labels == 1))
-    f1_score = jnp.where((2 * tp + fp + fn) > 0, 2 * tp / (2 * tp + fp + fn), 0.0)
+    denom = 2 * tp + fp + fn
+    f1_score = jnp.where(denom > 0, 2 * tp / jnp.maximum(denom, 1), 0.0)
 
     return loss, accuracy, f1_score
 
@@ -80,7 +81,8 @@ def eval_step(model: LearnabilityResNet, batch: tuple):
     tp = jnp.sum((predictions == 1) & (labels == 1))
     fp = jnp.sum((predictions == 1) & (labels == 0))
     fn = jnp.sum((predictions == 0) & (labels == 1))
-    f1_score = jnp.where((2 * tp + fp + fn) > 0, 2 * tp / (2 * tp + fp + fn), 0.0)
+    denom = 2 * tp + fp + fn
+    f1_score = jnp.where(denom > 0, 2 * tp / jnp.maximum(denom, 1), 0.0)
 
     return loss, accuracy, f1_score
 

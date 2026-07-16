@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from PIL import Image
 import numpy as np
 
-RESIZE = (352,192) #(64, 64) TODO: make this config dependent we use 64x64 for jaxnav but for xlandminigrid blocked unlockpickup env 64x64 produces suboptimal images
+from uedrlhf.config import RESIZE
 
 
 # === Pydantic model for structured LLM feedback response ===
@@ -52,9 +52,9 @@ def choice_to_preference(choice: str) -> float:
 
 
 def load_image_as_nparray(file_path: Path, size: tuple = RESIZE) -> np.ndarray:
-    """Load an image, resize it, and return as a float32 numpy array."""
+    """Load an image, resize it, and return as a float32 numpy array [0, 1]."""
     img = Image.open(file_path).resize(size).convert("RGB")
-    return np.array(img).astype(np.float32)
+    return np.array(img).astype(np.float32) / 255.0
 
 
 def load_array(file_path: Path):

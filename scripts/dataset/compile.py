@@ -55,7 +55,6 @@ def main():
 
             img_0 = load_image_as_nparray(img_0_path)
             img_1 = load_image_as_nparray(img_1_path)
-
             yield {
                 "env_0_image": img_0,
                 "env_1_image": img_1,

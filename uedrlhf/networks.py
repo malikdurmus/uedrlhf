@@ -127,8 +127,8 @@ class LearnabilityResNet(nnx.Module):
         x = self.stage3_block1(x, deterministic=deterministic)
         x = self.stage3_block2(x, deterministic=deterministic)
         
-        # this collapses (batch , channel) into (bath, channel)
-        x = jnp.max(x, axis=(1, 2))
+        # this collapses spatial dimensions via global average pooling
+        x = jnp.mean(x, axis=(1, 2))
         
         #  Scoring Head
         x = self.head_linear1(x)

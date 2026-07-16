@@ -58,6 +58,7 @@ LLM_CONFIG = CONFIG.get(LLM_PROVIDER, {})
 
 # === Data paths (scoped by environment, env_id, and feedback type) ===
 ENV_ID = ENV_CONFIG.get("env_id", ENVIRONMENT)
+RESIZE = tuple(ENV_CONFIG.get("resize", [64, 64]))
 
 if DATA_VERSION == "v1":
     DATA_DIR = BASE_DIR / "data" / FEEDBACK_TYPE
