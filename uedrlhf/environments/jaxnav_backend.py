@@ -65,13 +65,15 @@ class JaxNavBackend(EnvBackend):
     def render_state(self, state) -> np.ndarray:
         rasterize = self._get_rasterizer()
         img = rasterize(state)
-        return np.asarray(img)
+        img_np = np.asarray(img)
+        return (np.clip(img_np, 0.0, 1.0) * 255).astype(np.uint8)
 
     def render_batch(self, states) -> np.ndarray:
         rasterize = self._get_rasterizer()
         render_batch_fn = jax.jit(jax.vmap(rasterize))
         imgs = render_batch_fn(states)
-        return np.asarray(imgs)
+        imgs_np = np.asarray(imgs)
+        return (np.clip(imgs_np, 0.0, 1.0) * 255).astype(np.uint8)
 
     def state_to_dict(self, state) -> dict:
         return {
@@ -83,22 +85,24 @@ class JaxNavBackend(EnvBackend):
     def get_prompts(self) -> dict[str, str]:
         return {
             "difficulty_feedback": (
-                "You are evaluating two 2D grid-world navigation environments for a circular robot agent. "
-                "Each image shows a top-down view with:\n"
+                "You are evaluating two 2D grid-world navigation environments for a robot agent in a JaxNav simulator. "
+                "Each image shows a top-down view with the following elements:\n"
                 "- Black cells = obstacles (walls)\n"
                 "- White cells = free space\n"
-                "- Green circle = agent start position\n"
-                "- Red circle = goal position\n\n"
-                "Your task: Which environment is HARDER for the agent to navigate?\n\n"
+                "- Red marker = robot agent at its starting location (the black wedge on it indicates its initial heading)\n"
+                "- Green plus sign (+) = goal position\n"
+                "- Light gray line = a direct vector line connecting the agent's start center to the goal center (disregards walls)\n\n"
+                "Your task: Compare the two images provided. Which environment is HARDER for the agent to navigate from its start position to the goal?\n\n"
                 "Consider factors like:\n"
-                "- Number and placement of obstacles\n"
-                "- Narrowness of corridors the agent must pass through\n"
-                "- Length and complexity of the path from start to goal\n"
-                "- Whether the path requires sharp turns or backtracking\n\n"
+                "- Number, size, and placement of obstacles blocking the true path\n"
+                "- Narrowness or tightness of the open corridors the agent must pass through\n"
+                "- Total length and complexity of the valid traversable path (e.g., number of sharp turns required)\n"
+                "- The agent's initial heading relative to the actual path it must take\n"
+                "- Whether the layout forces the agent into dead-ends or requires significant backtracking\n\n"
                 "Choose:\n"
                 "  A  — if Image A is harder\n"
                 "  B  — if Image B is harder\n"
-                "  TIE — if they are equally difficult"
+                "  TIE — if they are equally difficult\n\n"
                 + JSON_INSTRUCTION
             ),
             "learnability_feedback": (

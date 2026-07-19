@@ -59,11 +59,19 @@ LLM_CONFIG = CONFIG.get(LLM_PROVIDER, {})
 # === Data paths (scoped by environment, env_id, and feedback type) ===
 ENV_ID = ENV_CONFIG.get("env_id", ENVIRONMENT)
 RESIZE = tuple(ENV_CONFIG.get("resize", [64, 64]))
+ONLY_SOLVABLE = ENV_CONFIG.get("only_solvable", False)
+
+# Auto-tag: isolate solvable-only data into its own directory
+_feedback_dir = f"{FEEDBACK_TYPE}_solvable" if ONLY_SOLVABLE else FEEDBACK_TYPE
 
 if DATA_VERSION == "v1":
-    DATA_DIR = BASE_DIR / "data" / FEEDBACK_TYPE
+    DATA_DIR = BASE_DIR / "data" / _feedback_dir
 else:
-    DATA_DIR = BASE_DIR / "data_v2" / ENVIRONMENT / ENV_ID / FEEDBACK_TYPE
+    # Avoid duplicate folders like jaxnav/jaxnav/
+    if ENV_ID == ENVIRONMENT:
+        DATA_DIR = BASE_DIR / f"data_{DATA_VERSION}" / ENVIRONMENT / _feedback_dir
+    else:
+        DATA_DIR = BASE_DIR / f"data_{DATA_VERSION}" / ENVIRONMENT / ENV_ID / _feedback_dir
 
 IMAGES_DIR = DATA_DIR / "images"
 ARRAYS_DIR = DATA_DIR / "arrays"

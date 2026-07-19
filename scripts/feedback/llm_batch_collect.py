@@ -11,9 +11,17 @@ import time
 import argparse
 from datetime import datetime, timezone
 
+#  to fix invalid_grant on cluster due to clock problem
+original_time = time.time
+time.time = lambda: original_time() - 300
+
+import google.auth
+from google.oauth2 import service_account
+from google.cloud import storage
+
 from google import genai
 
-from uedrlhf.config import BASE_DIR, LLM_CONFIG, DB_PATH
+from uedrlhf.config import BASE_DIR, LLM_CONFIG, DB_PATH, DATA_DIR
 from uedrlhf.db import get_connection, resolve_table_name
 from uedrlhf.utils import choice_to_preference
 
@@ -36,17 +44,27 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--job", required=True, help="Batch job name")
     parser.add_argument("--model", default=LLM_CONFIG.get("model", "gemini-2.5-flash"))
-    parser.add_argument("--api-key", default=None)
     parser.add_argument("--poll-interval", type=int, default=60)
     args = parser.parse_args()
 
-    api_key_env = LLM_CONFIG.get("api_key_env", "GEMINI_API_KEY")
-    api_key = args.api_key or os.environ.get(api_key_env)
-    if not api_key:
-        print(f"Error: Set {api_key_env} env var or pass --api-key")
-        sys.exit(1)
+    sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0874685804-41786176c265.json")
+    if os.path.exists(sa_file):
+        credentials = service_account.Credentials.from_service_account_file(
+            sa_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        project_id = credentials.project_id
+    else:
+        credentials, project_id = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
-    client = genai.Client(api_key=api_key)
+    location = "us-central1"
+    if "locations/" in args.job:
+        parts = args.job.split("/")
+        try:
+            location = parts[parts.index("locations") + 1]
+        except (ValueError, IndexError):
+            pass
+
+    client = genai.Client(vertexai=True, credentials=credentials, project=project_id, location=location)
     table_name = resolve_table_name(args.model)
 
     print(f"Polling job: {args.job}")
@@ -62,9 +80,31 @@ def main():
         print(f"Job did not succeed: {state}")
         sys.exit(1)
 
-    print("Downloading results...")
-    result_file_name = batch_job.dest.file_name
-    file_bytes = client.files.download(file=result_file_name)
+    print("Downloading results from GCS...")
+    
+    # Initialize GCS client using credentials
+    storage_client = storage.Client(credentials=credentials, project=project_id)
+    bucket_name = "uedrlhf-gemini-batch-storage"
+    bucket = storage_client.bucket(bucket_name)
+
+   
+    blobs = list(bucket.list_blobs(prefix=f"batch_outputs/{DATA_DIR.name}/"))
+    jsonl_blobs = [b for b in blobs if b.name.endswith(".jsonl")]
+
+    # Fallback for jobs submitted before the isolation fix
+    if not jsonl_blobs:
+        print(f"No results in gs://uedrlhf-gemini-batch-storage/batch_outputs/{DATA_DIR.name}/ ... falling back to root batch_outputs/")
+        blobs = list(bucket.list_blobs(prefix="batch_outputs/"))
+        jsonl_blobs = [b for b in blobs if b.name.endswith(".jsonl")]
+
+    if not jsonl_blobs:
+        print("No result JSONL files found in gs://uedrlhf-gemini-batch-storage/batch_outputs/ at all!")
+        sys.exit(1)
+    # pick the latest
+    latest_blob = max(jsonl_blobs, key=lambda b: b.time_created)
+    print(f"Reading from: gs://{bucket_name}/{latest_blob.name}")
+    
+    file_bytes = latest_blob.download_as_bytes()
     result_lines = file_bytes.decode("utf-8").splitlines()
     print(f"Got {len(result_lines)} result lines")
 

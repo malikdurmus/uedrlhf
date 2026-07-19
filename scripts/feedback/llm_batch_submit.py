@@ -10,7 +10,14 @@ import sys
 import json
 import argparse
 import numpy as np
+import time
 
+#  fix invalid_grant on cluster due to clock issue 
+original_time = time.time
+time.time = lambda: original_time() - 300
+
+import google.auth
+from google.oauth2 import service_account
 from google import genai
 from google.genai import types
 
@@ -26,16 +33,18 @@ from uedrlhf.llm_providers import get_llm_provider
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default=LLM_CONFIG.get("model", "gemini-2.5-flash"))
-    parser.add_argument("--api-key", default=None)
     args = parser.parse_args()
 
-    api_key_env = LLM_CONFIG.get("api_key_env", "GEMINI_API_KEY")
-    api_key = args.api_key or os.environ.get(api_key_env)
-    if not api_key:
-        print(f"Error: Set {api_key_env} env var or pass --api-key")
-        sys.exit(1)
+    sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0874685804-41786176c265.json")
+    if os.path.exists(sa_file):
+        credentials = service_account.Credentials.from_service_account_file(
+            sa_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        project_id = credentials.project_id
+    else:
+        credentials, project_id = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(vertexai=True, credentials=credentials, project=project_id, location="global")
 
     backend = get_env_backend(ENVIRONMENT, ENV_CONFIG)
     prompt = backend.get_prompts()[FEEDBACK_TYPE]
@@ -53,7 +62,7 @@ def main():
     conn.commit()
 
     cursor.execute(
-        f'SELECT pair_id, env_1_id, env_2_id FROM "{table_name}" WHERE status = ? LIMIT 10000',
+        f'SELECT pair_id, env_1_id, env_2_id FROM "{table_name}" WHERE status = ?',
         ("pending",),
     )
     pending = cursor.fetchall()
@@ -83,18 +92,26 @@ def main():
 
     print(f"JSONL written: {jsonl_path}  (skipped {skipped})")
 
-    print("Uploading to File API...")
-    uploaded_file = client.files.upload(
-        file=str(jsonl_path),
-        config=types.UploadFileConfig(display_name=f"batch_{table_name}", mime_type="jsonl")
-    )
-    print(f"Uploaded: {uploaded_file.name}")
+    bucket_name = "uedrlhf-gemini-batch-storage"
+    blob_name = f"batch_inputs/{DATA_DIR.name}_batch_input_{table_name}.jsonl"
+
+    print("Uploading to GCS...")
+    from google.cloud import storage
+    storage_client = storage.Client(credentials=credentials, project=project_id)
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(str(jsonl_path))
+    gcs_uri = f"gs://{bucket_name}/{blob_name}"
+    print(f"Uploaded: {gcs_uri}")
 
     print("Submitting batch job...")
     batch_job = client.batches.create(
         model=args.model,
-        src=uploaded_file.name,
-        config={"display_name": f"llm_feedback_{table_name}"},
+        src=gcs_uri,
+        config={
+            "display_name": f"llm_feedback_{table_name}_{DATA_DIR.name}",
+            "dest": f"gs://{bucket_name}/batch_outputs/{DATA_DIR.name}/"
+        },
     )
 
     print(f"\nBatch job submitted: {batch_job.name}")
