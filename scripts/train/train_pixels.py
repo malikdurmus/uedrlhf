@@ -31,7 +31,7 @@ BATCH_SIZE = TRAINING.get("batch_size", 512)
 EPOCHS = TRAINING.get("epochs", 50)
 LEARNING_RATE = TRAINING.get("learning_rate", 1e-3)
 DATASET_PATH = TRAINING.get("dataset_path", "data/difficulty/compiled_gemini_2_5_flash_20k")
-MODEL_TYPE = DATASET_PATH.split("/", 1)[-1] if "/" in DATASET_PATH else DATASET_PATH
+MODEL_TYPE = DATASET_PATH.rstrip("/").split("/")[-1]
 RUN_NAME = f"cnn-{MODEL_TYPE}" if TRAINING.get("run_name") == None else TRAINING.get("run_name")  
 PROJECT_NAME = TRAINING.get("project_name" , "uedrlhf")
 MODE = TRAINING.get("mode", "online")
@@ -113,7 +113,7 @@ def main():
     
     wandb.init(
         project= PROJECT_NAME,
-        name=f"cnn-{MODEL_TYPE}",
+        name=RUN_NAME,
         config={
             "batch_size": BATCH_SIZE,
             "epochs": EPOCHS,

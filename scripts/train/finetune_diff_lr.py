@@ -23,21 +23,30 @@ import multiprocessing
 
 multiprocessing.set_start_method('spawn', force=True)
 
-from uedrlhf.config import BASE_DIR, TRAINING
+from uedrlhf.config import BASE_DIR, FINETUNING
 from uedrlhf.networks import LearnabilityResNet
 
 # ==========================================
-# IMPORTANT: DEFINE THE CHECKPOINT PATH HERE
-PRETRAINED_CHECKPOINT_PATH = "" 
-# Example: str(BASE_DIR / "outputs" / "checkpoints" / "123456" / "epoch_30")
+PRETRAINED_CHECKPOINT_PATH = os.environ.get(
+    "PRETRAINED_CHECKPOINT_PATH", 
+    FINETUNING.get("pretrained_checkpoint_path", "")
+)
 # ==========================================
 
-IMG_SIZE = 120
-BATCH_SIZE = 64
-EPOCHS = 30
-DATASET_PATH = TRAINING.get("dataset_path", str(BASE_DIR / "data" / "difficulty" / "compiled_gemini_2_5_flash_dijkstra_15k"))
-RUN_NAME = "resnet-finetune-diff-lr"
-PROJECT_NAME = "uedrlhf"
+IMG_SIZE = FINETUNING.get("img_size", 120)
+BATCH_SIZE = FINETUNING.get("batch_size", 64)
+EPOCHS = FINETUNING.get("epochs", 30)
+LEARNING_RATE = FINETUNING.get("learning_rate", 1e-3)
+DATASET_PATH = os.environ.get(
+    "DATASET_PATH", 
+    FINETUNING.get("dataset_path", str(BASE_DIR / "data" / "difficulty" / "compiled_gemini_2_5_flash_dijkstra_15k"))
+)
+
+# Extract dataset folder name
+_model_type = DATASET_PATH.rstrip("/").split("/")[-1]
+
+PROJECT_NAME = os.environ.get("PROJECT_NAME", FINETUNING.get("project_name", "uedrlhf"))
+RUN_NAME = os.environ.get("RUN_NAME", f"resnet-finetune-diff-lr-{_model_type}")
 
 
 @nnx.jit
@@ -79,8 +88,9 @@ def prefetch_to_gpu(dataloader, queue_size=2):
             i1 = batch_dict['env_1_image'].numpy() if hasattr(batch_dict['env_1_image'], 'numpy') else np.array(batch_dict['env_1_image'])
             pref = batch_dict['preference'].numpy() if hasattr(batch_dict['preference'], 'numpy') else np.array(batch_dict['preference'])
 
-            i0_fp32 = i0.astype(np.float32) / 255.0
-            i1_fp32 = i1.astype(np.float32) / 255.0
+            # The dataset images are already 0.0 - 1.0 float arrays
+            i0_fp32 = i0.astype(np.float32)
+            i1_fp32 = i1.astype(np.float32)
             p_fp32 = pref.astype(np.float32)
 
             batch = (jnp.array(i0_fp32), jnp.array(i1_fp32), jnp.array(p_fp32))
@@ -101,15 +111,15 @@ def get_diff_lr_optimizer():
         if "head" in path_str:
             return "head"
         elif "stage2" in path_str or "stage3" in path_str:
-            return "mid"
+            return "slow"
         else:
-            return "freeze"
+            return "frozen"
 
     tx = optax.multi_transform(
         {
-            'head': optax.adam(1e-3),
-            'mid': optax.adam(1e-5),
-            'freeze': optax.set_to_zero()
+            'head': optax.adam(LEARNING_RATE), 
+            'slow': optax.adam(LEARNING_RATE/100), 
+            'frozen': optax.set_to_zero()
         },
         lambda params: jax.tree_util.tree_map_with_path(map_params_to_labels, params)
     )
@@ -128,7 +138,7 @@ def main():
             "batch_size": BATCH_SIZE,
             "epochs": EPOCHS,
             "img_size": IMG_SIZE,
-            "learning_rate": "Head (1e-3), Mid (1e-5), Stem (0.0)",
+            "learning_rate": f"{LEARNING_RATE} (head), {LEARNING_RATE/100} (stages 2-3), 0.0 (stem+stage1)",
         }
     )
 
@@ -154,7 +164,8 @@ def main():
     optimizer = nnx.Optimizer(model, get_diff_lr_optimizer(), wrt=nnx.Param)
 
     best_eval_loss = float("inf")
-    checkpoint_dir = BASE_DIR / "outputs" / "checkpoints" / f"finetune_diff_lr_checkpoints" / wandb.run.id
+    run_id = wandb.run.id if wandb.run is not None else "local"
+    checkpoint_dir = BASE_DIR / "outputs" / "checkpoints" / f"{RUN_NAME}_{run_id}"
 
     for epoch in range(EPOCHS):
         epoch_train_losses = []

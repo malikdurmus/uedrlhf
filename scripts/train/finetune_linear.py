@@ -21,21 +21,30 @@ import multiprocessing
 
 multiprocessing.set_start_method('spawn', force=True)
 
-from uedrlhf.config import BASE_DIR, TRAINING
+from uedrlhf.config import BASE_DIR, FINETUNING
 from uedrlhf.networks import LearnabilityResNet
 
 # ==========================================
-# IMPORTANT: DEFINE THE CHECKPOINT PATH HERE
-PRETRAINED_CHECKPOINT_PATH = "/home/d/durmusy/Desktop/GIT/new/uedrlhf/outputs/checkpoints/lbec1lyl/epoch_14" 
-# Example: str(BASE_DIR / "outputs" / "checkpoints" / "123456" / "epoch_30")
+PRETRAINED_CHECKPOINT_PATH = os.environ.get(
+    "PRETRAINED_CHECKPOINT_PATH", 
+    FINETUNING.get("pretrained_checkpoint_path", "/home/d/durmusy/Desktop/GIT/new/uedrlhf/outputs/checkpoints/lbec1lyl/epoch_14")
+)
 # ==========================================
 
-IMG_SIZE = 120
-BATCH_SIZE = 64  
-EPOCHS = 30
-DATASET_PATH = "/home/d/durmusy/Desktop/GIT/new/uedrlhf/data_v2/difficulty/compiled_human_preference_pairs_len_690" # TODO change this to config
-RUN_NAME = "resnet-finetune-linear_hf"
-PROJECT_NAME = "uedrlhf"
+IMG_SIZE = FINETUNING.get("img_size", 120)
+BATCH_SIZE = FINETUNING.get("batch_size", 64)
+EPOCHS = FINETUNING.get("epochs", 30)
+LEARNING_RATE = FINETUNING.get("learning_rate", 1e-3)
+DATASET_PATH = os.environ.get(
+    "DATASET_PATH", 
+    FINETUNING.get("dataset_path", "/home/d/durmusy/Desktop/GIT/new/uedrlhf/data_v2/difficulty/compiled_human_preference_pairs_len_690")
+)
+
+# Extract dataset folder name
+_model_type = DATASET_PATH.rstrip("/").split("/")[-1]
+
+PROJECT_NAME = os.environ.get("PROJECT_NAME", FINETUNING.get("project_name", "uedrlhf"))
+RUN_NAME = os.environ.get("RUN_NAME", f"resnet-finetune-linear_hf-{_model_type}")
 
 
 @nnx.jit
@@ -87,9 +96,10 @@ def prefetch_to_gpu(dataloader, queue_size=2):
             i1 = batch_dict['env_1_image'].numpy() if hasattr(batch_dict['env_1_image'], 'numpy') else np.array(batch_dict['env_1_image'])
             pref = batch_dict['preference'].numpy() if hasattr(batch_dict['preference'], 'numpy') else np.array(batch_dict['preference'])
 
-            # Normalize 
-            i0_fp32 = i0.astype(np.float32) / 255.0
-            i1_fp32 = i1.astype(np.float32) / 255.0
+            # The images in the dataset are already float64 arrays between 0.0 and 1.0!
+            # We just need to cast them to float32.
+            i0_fp32 = i0.astype(np.float32)
+            i1_fp32 = i1.astype(np.float32)
             
             # Map preference so 1.0 is Right Image, 0.0 is Left Image
             p_fp32 = pref.astype(np.float32)
@@ -117,7 +127,7 @@ def get_linear_optimizer():
         return "frozen"
 
     tx = optax.multi_transform(
-        {'trainable': optax.adam(1e-3), 'frozen': optax.set_to_zero()},
+        {'trainable': optax.adam(LEARNING_RATE), 'frozen': optax.set_to_zero()},
         lambda params: jax.tree_util.tree_map_with_path(map_params_to_labels, params)
     )
     return tx
@@ -135,7 +145,7 @@ def main():
             "batch_size": BATCH_SIZE,
             "epochs": EPOCHS,
             "img_size": IMG_SIZE,
-            "learning_rate": "1e-3 (head), 0.0 (cnn)",
+            "learning_rate": f"{LEARNING_RATE} (head), 0.0 (cnn)",
         }
     )
 
@@ -172,7 +182,8 @@ def main():
     optimizer = nnx.Optimizer(model, get_linear_optimizer(), wrt=nnx.Param)
 
     best_eval_loss = float("inf")
-    checkpoint_dir = BASE_DIR / "outputs" / "checkpoints" / f"finetune_linear_checkpoints" / wandb.run.id
+    run_id = wandb.run.id if wandb.run is not None else "local"
+    checkpoint_dir = BASE_DIR / "outputs" / "checkpoints" / f"{RUN_NAME}_{run_id}"
 
     print(f"Starting Linear Finetune on {len(ds_splitted['train'])} train comparisons, {len(ds_splitted['test'])} eval comparisons...")
     

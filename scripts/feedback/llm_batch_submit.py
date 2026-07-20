@@ -23,7 +23,7 @@ from google.genai import types
 
 from uedrlhf.config import (
     BASE_DIR, ENVIRONMENT, ENV_CONFIG,
-    LLM_CONFIG, FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, DB_PATH,
+    LLM_CONFIG, FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, DB_PATH, GOOGLE_CREDENTIALS_FILE,
 )
 from uedrlhf.db import get_connection, resolve_table_name, create_model_table, populate_from_llm_pairs
 from uedrlhf.environments import get_env_backend
@@ -35,7 +35,7 @@ def main():
     parser.add_argument("--model", default=LLM_CONFIG.get("model", "gemini-2.5-flash"))
     args = parser.parse_args()
 
-    sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0874685804-41786176c265.json")
+    sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", GOOGLE_CREDENTIALS_FILE)
     if os.path.exists(sa_file):
         credentials = service_account.Credentials.from_service_account_file(
             sa_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]

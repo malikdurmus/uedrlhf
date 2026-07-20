@@ -79,6 +79,9 @@ DB_PATH = DATA_DIR / "database_v2.db"
 
 # === Training config ===
 TRAINING = CONFIG.get("training", {})
+FINETUNING = CONFIG.get("finetuning", {})
+
+GOOGLE_CREDENTIALS_FILE = LLM_CONFIG.get("credentials_file", "gen-lang-client-0874685804-41786176c265.json")
 
 # === JSON instruction suffix (appended to all LLM prompts) ===
 JSON_INSTRUCTION = """
