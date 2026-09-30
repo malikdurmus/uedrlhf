@@ -11,7 +11,6 @@ Usage (from xland_backend.py):
 from uedrlhf.config import JSON_INSTRUCTION
 
 
-# ── Generic / default prompts ───────────────────────────────────────────
 # Used as a fallback when the env_id has no dedicated entry.
 
 _DEFAULT_PROMPTS: dict[str, str] = {
@@ -78,11 +77,17 @@ def get_xland_prompt(env_id: str, feedback_type: str) -> str:
     """Return the prompt for a given env_id and feedback_type.
 
     Lookup order:
-        1. ENV_PROMPTS[env_id][feedback_type]   (env-specific override)
-        2. _DEFAULT_PROMPTS[feedback_type]       (generic fallback)
+        1. RULESET specific prompt (if config.RULESET is set)
+        2. ENV_PROMPTS[env_id][feedback_type]   (env-specific override)
+        3. _DEFAULT_PROMPTS[feedback_type]       (generic fallback)
 
     Raises KeyError if the feedback_type is not found in either dict.
     """
+    from uedrlhf.config import RULESET
+    if RULESET:
+        from uedrlhf.environments.xland_rulesets import get_ruleset_prompt
+        return get_ruleset_prompt(RULESET)
+        
     env_entry = ENV_PROMPTS.get(env_id, {})
     prompt = env_entry.get(feedback_type)
     if prompt is not None:

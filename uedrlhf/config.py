@@ -58,11 +58,17 @@ LLM_CONFIG = CONFIG.get(LLM_PROVIDER, {})
 
 # === Data paths (scoped by environment, env_id, and feedback type) ===
 ENV_ID = ENV_CONFIG.get("env_id", ENVIRONMENT)
+RULESET = ENV_CONFIG.get("ruleset", None)
 RESIZE = tuple(ENV_CONFIG.get("resize", [64, 64]))
 ONLY_SOLVABLE = ENV_CONFIG.get("only_solvable", False)
 
-# Auto-tag: isolate solvable-only data into its own directory
-_feedback_dir = f"{FEEDBACK_TYPE}_solvable" if ONLY_SOLVABLE else FEEDBACK_TYPE
+# Auto-tag: isolate solvable-only and thinking-level data into its own directory
+_feedback_dir = FEEDBACK_TYPE
+_thinking_level = LLM_CONFIG.get("thinking_level", None)
+if _thinking_level:
+    _feedback_dir += f"_{_thinking_level.lower()}"
+if ONLY_SOLVABLE:
+    _feedback_dir += "_solvable"
 
 if DATA_VERSION == "v1":
     DATA_DIR = BASE_DIR / "data" / _feedback_dir
@@ -71,7 +77,10 @@ else:
     if ENV_ID == ENVIRONMENT:
         DATA_DIR = BASE_DIR / f"data_{DATA_VERSION}" / ENVIRONMENT / _feedback_dir
     else:
-        DATA_DIR = BASE_DIR / f"data_{DATA_VERSION}" / ENVIRONMENT / ENV_ID / _feedback_dir
+        if RULESET:
+            DATA_DIR = BASE_DIR / f"data_{DATA_VERSION}" / ENVIRONMENT / f"ruleset_{RULESET}" / _feedback_dir
+        else:
+            DATA_DIR = BASE_DIR / f"data_{DATA_VERSION}" / ENVIRONMENT / ENV_ID / _feedback_dir
 
 IMAGES_DIR = DATA_DIR / "images"
 ARRAYS_DIR = DATA_DIR / "arrays"
@@ -80,8 +89,10 @@ DB_PATH = DATA_DIR / "database_v2.db"
 # === Training config ===
 TRAINING = CONFIG.get("training", {})
 FINETUNING = CONFIG.get("finetuning", {})
+PRETRAINING = CONFIG.get("pretraining", {})
 
 GOOGLE_CREDENTIALS_FILE = LLM_CONFIG.get("credentials_file", "gen-lang-client-0874685804-41786176c265.json")
+GCS_BUCKET = LLM_CONFIG.get("gcs_bucket", "uedrlhf-gemini-batch-storage")
 
 # === JSON instruction suffix (appended to all LLM prompts) ===
 JSON_INSTRUCTION = """

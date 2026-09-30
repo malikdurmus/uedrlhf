@@ -1,6 +1,7 @@
 """Neural network architectures for reward model training."""
 
 from functools import partial
+import jax
 import jax.numpy as jnp 
 from flax import nnx
 
@@ -24,7 +25,7 @@ class CNN(nnx.Module):
         self.dropout2 = nnx.Dropout(rate=0.025, rngs=rngs)
         self.linear2 = nnx.Linear(in_features=256, out_features=1, rngs=rngs)
 
-    def __call__(self, x, rngs: nnx.Rngs | None = None):
+    def __call__(self, x, rngs: nnx.Rngs | None = None, return_logits: bool = False):
         x = self.conv1(x)
         x = self.dropout1(x, rngs=rngs)
         x = self.batch_norm1(x)
@@ -41,7 +42,9 @@ class CNN(nnx.Module):
         x = nnx.relu(self.dropout2(self.linear1(x), rngs=rngs))
         x = self.linear2(x)
         x = x.squeeze()  # return scalar value
-        return x
+        if return_logits:
+            return x
+        return jax.nn.sigmoid(x)
 
 
 class ResNetBlock(nnx.Module):
@@ -110,7 +113,7 @@ class LearnabilityResNet(nnx.Module):
         self.head_dropout = nnx.Dropout(rate=0.3, rngs=rngs)
         self.head_linear2 = nnx.Linear(in_features=128, out_features=1, rngs=rngs)
 
-    def __call__(self, x, deterministic: bool = False, rngs: nnx.Rngs | None = None):
+    def __call__(self, x, deterministic: bool = False, rngs: nnx.Rngs | None = None, return_logits: bool = False):
         
         # stem
         x = self.stem_conv(x)
@@ -136,5 +139,8 @@ class LearnabilityResNet(nnx.Module):
         x = self.head_dropout(x, deterministic=deterministic, rngs=rngs)
         x = self.head_linear2(x)
         
-        return jnp.squeeze(x, axis=-1)
+        logits = jnp.squeeze(x, axis=-1)
+        if return_logits:
+            return logits
+        return jax.nn.sigmoid(logits)
     

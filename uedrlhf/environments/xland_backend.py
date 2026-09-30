@@ -34,7 +34,15 @@ class XLandMiniGridBackend(EnvBackend):
 
     def create_env(self):
         import xminigrid
+        from uedrlhf.config import RULESET
+        
         self._env, self._env_params = xminigrid.make(self.env_id)
+        
+        if RULESET:
+            from uedrlhf.environments.xland_rulesets import get_ruleset
+            ruleset = get_ruleset(RULESET)
+            self._env_params = self._env_params.replace(ruleset=ruleset)
+            
         return self._env, self._env_params
 
     def generate_states(self, rng, num_envs):

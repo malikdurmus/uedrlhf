@@ -15,7 +15,7 @@ from google.genai import types
 
 from uedrlhf.llm_providers.base import LLMProvider
 from uedrlhf.utils import img_to_base64, choice_to_preference, LLMFeedbackResponse
-from uedrlhf.config import BASE_DIR, JSON_INSTRUCTION
+from uedrlhf.config import BASE_DIR, JSON_INSTRUCTION, LLM_CONFIG
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -92,6 +92,16 @@ class GeminiProvider(LLMProvider):
         b64_a = img_to_base64(img_a_path)
         b64_b = img_to_base64(img_b_path)
 
+        generation_config = {
+            "responseMimeType": "application/json",
+        }
+        
+        thinking_level = LLM_CONFIG.get("thinking_level", None)
+        if thinking_level:
+            generation_config["thinkingConfig"] = {
+                "thinkingLevel": thinking_level.upper()
+            }
+
         return {
             "key": key,
             "request": {
@@ -108,8 +118,6 @@ class GeminiProvider(LLMProvider):
                         ],
                     }
                 ],
-                "generationConfig": {
-                    "responseMimeType": "application/json",
-                },
+                "generationConfig": generation_config,
             },
         }

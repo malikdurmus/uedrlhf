@@ -1,49 +1,67 @@
 data_version: "v3"
-environment: jaxnav
+environment: xland_minigrid
 feedback_source: "gemini-3.5-flash"
 feedback_type: difficulty_feedback
+
 gemini:
+  thinking_level: "low"
   api_key_env: GEMINI_API_KEY
   model: gemini-3.5-flash
-  credentials_file: "gen-lang-client-0874685804-41786176c265.json"
+  credentials_file: "migmg_acc_project-19015e49-5e63-49ec-b15-9d1bed277d3d.json"
+  gcs_bucket: "migmg-acc-batch-storage" 
+  #"kerem-gemini-batch-storage"
+  # "uedrlhf-gemini-batch-storage"
 jaxnav:
   cell_size: 1.0
   img_size: 120
   map_height: 11.0
   map_width: 11.0
   num_agents: 1
-  only_solvable: true
+  only_solvable: false
   resize:
   - 64
   - 64
 learnability_mode: dijkstra
+
 llm_provider: gemini
+
 finetuning:
+  augment_symmetry: false
   batch_size: 64
   dataset_path: data_v3/jaxnav/difficulty_feedback/compiled_gemini_3_5_flash_len_21990
   epochs: 30
   img_size: 120
   learning_rate: 0.001
-  pretrained_checkpoint_path: outputs/checkpoints/3zsrto52/epoch_17
+  pretrained_checkpoint_path: outputs/checkpoints/pretrained/3zsrto52/epoch_17
   project_name: gemini35-finetune
   run_name: null
+  seed: 0
+
+pretraining:
+  augment_symmetry: false
+  seed: 0
+
 openwebui:
   api_key_env: OPENWEBUI_API_KEY
   base_url: https://llm.mobile.ifi.lmu.de
   model: gemma4:e2b
+
 training:
-  batch_size: 128
+  augment_symmetry: false
+  batch_size: 32
   dataset_path: data_v3/jaxnav/difficulty_feedback/compiled_gemini_3_5_flash_len_21990
   epochs: 50
   img_size: 9999
   learning_rate: 0.001
   project_name: gemini35-direct
   run_name: null
+  seed: 0
   
 xland_minigrid:
-  env_id: MiniGrid-BlockedUnlockPickUp
+  env_id: XLand-MiniGrid-R4-13x13
+  ruleset: difficult
   resize:
-  - 88
-  - 48
+  - 200
+  - 200
   tile_size: 32
   view_size: 7
