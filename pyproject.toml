@@ -54,5 +54,11 @@ torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }
 
 
+[tool.pytest.ini_options]
+# scripts/debug/ holds manual inspection utilities, not a test suite. Several
+# are named test_*.py for historical reasons and execute real work at import
+# (API calls, environment generation), so keep pytest out of them.
+norecursedirs = ["scripts", "archive", "data", "data_v2", "data_v3", "outputs", "wandb", ".venv"]
+
 [tool.setuptools]
 packages = ["uedrlhf"]
