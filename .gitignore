@@ -58,3 +58,7 @@ epochs.txt
 
 # Local scratch / archive
 archive/
+
+# Agent workflow notes (references the private thesis docs)
+CLAUDE.md
+.claude/
