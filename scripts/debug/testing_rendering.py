@@ -10,11 +10,12 @@ from PIL import Image
 
 import xminigrid
 from uedrlhf.jax_renderer import jax_render, build_tile_caches
+from uedrlhf.config import BASE_DIR
 
 # ---- Config ----
 NUM_ENVS = 10
 TILE_SIZE = 32
-OUTPUT_DIR = "/home/d/durmusy/Desktop/GIT/new/uedrlhf/testing_renderer"
+OUTPUT_DIR = str(BASE_DIR / "testing_renderer")
 ENV_NAME = "XLand-MiniGrid-R4-9x9"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)

@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from jaxmarl.environments.jaxnav.jaxnav_env import JaxNav
 import matplotlib.pyplot as plt
 import argparse
+from uedrlhf.config import BASE_DIR
 
 def get_env_ids_from_db(db_path: Path):
     if not db_path.exists():
@@ -82,7 +83,7 @@ def check_solvability(env_ids, arrays_dir: Path):
     return solvable_count, unsolvable_count, missing_count
 
 def main():
-    base_dir = Path("/home/d/durmusy/Desktop/GIT/new/uedrlhf/data_v3/jaxnav")
+    base_dir = BASE_DIR / "data_v3/jaxnav"
     datasets = [d for d in base_dir.iterdir() if d.is_dir()]
     
     results = {}
@@ -135,7 +136,7 @@ def main():
         ax.bar_label(rects2, padding=3)
         
         fig.tight_layout()
-        out_path = Path("/home/d/durmusy/Desktop/GIT/new/uedrlhf/data_v3/solvability_distribution.png")
+        out_path = BASE_DIR / "data_v3/solvability_distribution.png"
         plt.savefig(out_path)
         print(f"\nPlot saved to {out_path}")
     else:

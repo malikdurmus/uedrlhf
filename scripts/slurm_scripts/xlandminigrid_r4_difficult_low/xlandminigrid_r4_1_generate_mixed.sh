@@ -8,7 +8,7 @@
 #SBATCH --error=outputs/slurm_logs/v3/%j_err.log
 
 mkdir -p outputs/slurm_logs/v3
-cd ~/Desktop/GIT/new/uedrlhf
+cd "${REPO_ROOT:-$HOME/Desktop/GIT/new/uedrlhf}"
 source .venv/bin/activate
 
 # Configure: xland_minigrid, v3, only_solvable=false, ruleset=difficult, thinking_level=low

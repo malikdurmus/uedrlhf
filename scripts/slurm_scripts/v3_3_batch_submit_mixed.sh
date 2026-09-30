@@ -9,7 +9,7 @@
 unset GOOGLE_APPLICATION_CREDENTIALS
 export GEMINI_API_KEY="AQ.Ab8RN6IiJLdVaArCTL7ZHjTh23K--2-BY6TXPIotR0nNTEFT7Q"
 mkdir -p outputs/slurm_logs/v3
-cd ~/Desktop/GIT/new/uedrlhf
+cd "${REPO_ROOT:-$HOME/Desktop/GIT/new/uedrlhf}"
 source .venv/bin/activate
 
 # Configure: jaxnav, v3, only_solvable=false (mixed)

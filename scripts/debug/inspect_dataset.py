@@ -3,8 +3,9 @@ from torch.utils.data import DataLoader
 from datasets import load_from_disk
 import numpy as np
 import traceback
+from uedrlhf.config import BASE_DIR
 
-DATASET_PATH = "/home/d/durmusy/Desktop/GIT/new/uedrlhf/data_v3/xland_minigrid/ruleset_difficult/difficulty_feedback_low/compiled_gemini_3_5_flash_len_21973"
+DATASET_PATH = str(BASE_DIR / "data_v3/xland_minigrid/ruleset_difficult/difficulty_feedback_low/compiled_gemini_3_5_flash_len_21973")
 ds = load_from_disk(DATASET_PATH)
 
 columns = ['env_0_image', 'env_1_image', 'preference']

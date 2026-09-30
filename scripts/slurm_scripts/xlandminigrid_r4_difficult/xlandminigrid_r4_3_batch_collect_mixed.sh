@@ -9,7 +9,7 @@
 #SBATCH --output=outputs/slurm_logs/v3/%j_out.log
 #SBATCH --error=outputs/slurm_logs/v3/%j_err.log
 mkdir -p outputs/slurm_logs/v3
-cd ~/Desktop/GIT/new/uedrlhf
+cd "${REPO_ROOT:-$HOME/Desktop/GIT/new/uedrlhf}"
 source .venv/bin/activate
 
 sed -i 's/^environment:.*/environment: xland_minigrid/' config.yaml

@@ -24,7 +24,7 @@ from uedrlhf.networks import LearnabilityResNet
 # ==========================================
 PRETRAINED_CHECKPOINT_PATH = os.environ.get(
     "PRETRAINED_CHECKPOINT_PATH",
-    FINETUNING.get("pretrained_checkpoint_path", "/home/d/durmusy/Desktop/GIT/new/uedrlhf/outputs/checkpoints/lbec1lyl/epoch_14")
+    FINETUNING.get("pretrained_checkpoint_path", str(BASE_DIR / "outputs/checkpoints/lbec1lyl/epoch_14"))
 )
 # ==========================================
 
@@ -34,7 +34,7 @@ EPOCHS = FINETUNING.get("epochs", 30)
 LEARNING_RATE = FINETUNING.get("learning_rate", 1e-5)
 DATASET_PATH = os.environ.get(
     "DATASET_PATH", 
-    FINETUNING.get("dataset_path", "/home/d/durmusy/Desktop/GIT/new/uedrlhf/data_v2/difficulty/compiled_gemini_2_5_flash_len_7700")
+    FINETUNING.get("dataset_path", str(BASE_DIR / "data_v2/difficulty/compiled_gemini_2_5_flash_len_7700"))
 )
 
 # Extract dataset folder name

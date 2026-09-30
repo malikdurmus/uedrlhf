@@ -1,7 +1,8 @@
 import hashlib
 from tqdm import tqdm
 from datasets import load_from_disk
-ds = load_from_disk("/home/d/durmusy/Desktop/GIT/new/uedrlhf/dataset_1M/dataset")
+from uedrlhf.config import BASE_DIR
+ds = load_from_disk(str(BASE_DIR / "dataset_1M/dataset"))
 
 def find_duplicates(dataset):
     hashes = {}

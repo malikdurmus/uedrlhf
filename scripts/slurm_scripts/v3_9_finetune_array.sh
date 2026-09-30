@@ -10,7 +10,7 @@
 # 2 Datasets x 3 Methods x 5 Runs = 30 Jobs
 
 mkdir -p outputs/slurm_logs/v3
-cd ~/Desktop/GIT/new/uedrlhf
+cd "${REPO_ROOT:-$HOME/Desktop/GIT/new/uedrlhf}"
 source .venv/bin/activate
 
 # 1. Determine Dataset (first 15 jobs are mixed, last 15 are solvable)
@@ -37,7 +37,7 @@ else
 fi
 
 # 3. Export global variables for the python scripts to read
-export PRETRAINED_CHECKPOINT_PATH="/home/d/durmusy/Desktop/GIT/new/uedrlhf/outputs/checkpoints/3zsrto52/epoch_17"
+export PRETRAINED_CHECKPOINT_PATH="$PWD/outputs/checkpoints/3zsrto52/epoch_17"
 export PROJECT_NAME="gemini35-finetune"
 export RUN_NAME="${METHOD_TAG}-${DS_TAG}"
 

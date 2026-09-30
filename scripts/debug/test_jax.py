@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from tqdm.auto import trange, tqdm
 
 from uedrlhf.jax_renderer import jax_render, build_tile_caches
+from uedrlhf.config import BASE_DIR
 
 
 def save_img(img, output_path, dpi=32):
@@ -48,7 +49,7 @@ print("TimeStep shapes:", jtu.tree_map(jnp.shape, timestep))
 
 # ---- Original (numpy) render ----
 img_original = env.render(env_params, timestep)
-save_img(img_original, "/home/d/durmusy/Desktop/GIT/new/uedrlhf/imggg1.png", dpi=64)
+save_img(img_original, str(BASE_DIR / "imggg1.png"), dpi=64)
 
 # ---- JAX jittable render ----
 TILE_SIZE = 32
@@ -65,7 +66,7 @@ img_jax = jax_render(
 )
 img_jax_np = np.asarray(img_jax)
 
-save_img(img_jax_np, "/home/d/durmusy/Desktop/GIT/new/uedrlhf/imggg1_jax.png", dpi=64)
+save_img(img_jax_np, str(BASE_DIR / "imggg1_jax.png"), dpi=64)
 
 # ---- Compare the two renders ----
 print("\n=== Renderer Comparison ===")
@@ -101,7 +102,7 @@ axes[2].imshow(diff.astype(np.uint8) * 50)  # amplify differences for visibility
 axes[2].set_title(f"Difference (×50), max={max_diff}")
 axes[2].axis("off")
 plt.tight_layout()
-plt.savefig("/home/d/durmusy/Desktop/GIT/new/uedrlhf/render_comparison.png", dpi=150)
+plt.savefig(str(BASE_DIR / "render_comparison.png"), dpi=150)
 plt.close()
 print("Saved comparison image to render_comparison.png")
 

@@ -9,7 +9,7 @@
 # 3 Methods x 5 Runs = 15 Jobs for the Solvable Dataset
 
 mkdir -p outputs/slurm_logs/v3
-cd ~/Desktop/GIT/new/uedrlhf
+cd "${REPO_ROOT:-$HOME/Desktop/GIT/new/uedrlhf}"
 source .venv/bin/activate
 
 export DATASET_PATH="data_v3/jaxnav/difficulty_feedback_solvable/compiled_gemini_3_5_flash_len_21989"
@@ -27,7 +27,7 @@ else
     METHOD_TAG="full"
 fi
 
-export PRETRAINED_CHECKPOINT_PATH="/home/d/durmusy/Desktop/GIT/new/uedrlhf/outputs/checkpoints/3zsrto52/epoch_17"
+export PRETRAINED_CHECKPOINT_PATH="$PWD/outputs/checkpoints/3zsrto52/epoch_17"
 export PROJECT_NAME="gemini35-finetune"
 export RUN_NAME="${METHOD_TAG}-${DS_TAG}"
 

@@ -7,7 +7,7 @@
 #SBATCH --array=0-4
 #SBATCH --output=outputs/slurm_logs/v3/gemma_bup_%a_%j_out.log
 #SBATCH --error=outputs/slurm_logs/v3/gemma_bup_%a_%j_err.log
-cd ~/Desktop/GIT/new/uedrlhf
+cd "${REPO_ROOT:-$HOME/Desktop/GIT/new/uedrlhf}"
 source .venv/bin/activate
 export DATASET_PATH=data_v2/xland_minigrid/MiniGrid-BlockedUnlockPickUp/difficulty_feedback/compiled_gemma4_e2b_len_21992
 export PROJECT_NAME=tvt2-n-gemma4-direct-blockedunlock
