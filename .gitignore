@@ -62,3 +62,5 @@ archive/
 # Agent workflow notes (references the private thesis docs)
 CLAUDE.md
 .claude/
+outputs/jaxnav_100_levels/
+rendered_levels/
