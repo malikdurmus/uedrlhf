@@ -107,7 +107,6 @@ scripts/
   debug/                    manual inspection utilities (not a test suite)
 
 app/                      FastAPI app for collecting human preference labels
-cloud/                    VM provisioning helpers
 outputs/analysis/         result tables and figures backing the numbers below
 config.yaml               single source of truth for every run
 ```
