@@ -19,7 +19,6 @@ def find_duplicates(dataset):
         img_hash = hashlib.md5(img_bytes).hexdigest()
         
         if img_hash in hashes:
-            # We found a duplicate! Store the current index and the original index
             duplicates.append((i, hashes[img_hash]))
         else:
             hashes[img_hash] = i
@@ -27,8 +26,6 @@ def find_duplicates(dataset):
 
     return duplicates
 
-
-# Run it on your loaded 'ds'
 dup_list = find_duplicates(ds)
 
 if not dup_list:

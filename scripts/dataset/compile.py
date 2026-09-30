@@ -5,7 +5,9 @@ Usage:
 """
 
 from pathlib import Path
-from datasets import Dataset
+
+import numpy as np
+from datasets import Array3D, Dataset, Features, Value
 
 from uedrlhf.config import FEEDBACK_TYPE, FEEDBACK_SOURCE, LEARNABILITY_MODE, DATA_DIR, IMAGES_DIR, DB_PATH
 from uedrlhf.db import get_connection, resolve_table_name
@@ -41,6 +43,30 @@ def main():
 
     img_dir = IMAGES_DIR
 
+    def as_uint8(img: np.ndarray) -> np.ndarray:
+        
+        return np.round(img * 255.0).astype(np.uint8)
+
+    # Probe image shape from the first available pair to declare a fixed schema.
+    img_shape = None
+    for row in rows:
+        p = img_dir / f"{row[0]}.png"
+        if p.exists():
+            img_shape = load_image_as_nparray(p).shape
+            break
+    if img_shape is None:
+        print("No images found for any row. Nothing to compile.")
+        return
+
+    features = Features({
+        "env_0_image": Array3D(shape=img_shape, dtype="uint8"),
+        "env_1_image": Array3D(shape=img_shape, dtype="uint8"),
+        "preference": Value("float64"),
+        "split": Value("string"),
+        "x_pct": Value("float64"),
+        "y_pct": Value("float64"),
+    })
+
     def ds_generator():
         skipped = 0
         for row in rows:
@@ -56,8 +82,8 @@ def main():
             img_0 = load_image_as_nparray(img_0_path)
             img_1 = load_image_as_nparray(img_1_path)
             yield {
-                "env_0_image": img_0,
-                "env_1_image": img_1,
+                "env_0_image": as_uint8(img_0),
+                "env_1_image": as_uint8(img_1),
                 "preference": preference,
                 "split": split,
                 "x_pct": x_pct,
@@ -67,7 +93,7 @@ def main():
         if skipped:
             print(f"Skipped {skipped} rows (missing files)")
 
-    ds = Dataset.from_generator(ds_generator, writer_batch_size=1000)
+    ds = Dataset.from_generator(ds_generator, writer_batch_size=1000, features=features)
 
     output_dir = DATA_DIR / f"compiled_{table_name}_len_{len(rows)}"
     ds.save_to_disk(str(output_dir))

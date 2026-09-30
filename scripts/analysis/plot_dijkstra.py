@@ -1,9 +1,3 @@
-"""Plot the distribution of Dijkstra shortest-path distances for generated environments.
-
-Usage:
-    python scripts/analysis/plot_dijkstra.py
-"""
-
 import jax
 import numpy as np
 import matplotlib.pyplot as plt

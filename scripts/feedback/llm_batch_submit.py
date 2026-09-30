@@ -23,7 +23,7 @@ from google.genai import types
 
 from uedrlhf.config import (
     BASE_DIR, ENVIRONMENT, ENV_CONFIG,
-    LLM_CONFIG, FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, DB_PATH, GOOGLE_CREDENTIALS_FILE,
+    LLM_CONFIG, FEEDBACK_TYPE, DATA_DIR, IMAGES_DIR, DB_PATH, GOOGLE_CREDENTIALS_FILE, GCS_BUCKET,
 )
 from uedrlhf.db import get_connection, resolve_table_name, create_model_table, populate_from_llm_pairs
 from uedrlhf.environments import get_env_backend
@@ -32,7 +32,7 @@ from uedrlhf.llm_providers import get_llm_provider
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default=LLM_CONFIG.get("model", "gemini-2.5-flash"))
+    parser.add_argument("--model", default=LLM_CONFIG.get("model", "gemini-3.5-flash"))
     args = parser.parse_args()
 
     sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", GOOGLE_CREDENTIALS_FILE)
@@ -92,7 +92,7 @@ def main():
 
     print(f"JSONL written: {jsonl_path}  (skipped {skipped})")
 
-    bucket_name = "uedrlhf-gemini-batch-storage"
+    bucket_name = GCS_BUCKET
     blob_name = f"batch_inputs/{DATA_DIR.name}_batch_input_{table_name}.jsonl"
 
     print("Uploading to GCS...")

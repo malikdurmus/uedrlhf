@@ -1,8 +1,3 @@
-"""Fine-tune LearnabilityResNet fully.
-
-All components of the CNN are trained, with a reduced learning rate (1e-5).
-"""
-
 import time
 import os
 import numpy as np
@@ -13,6 +8,7 @@ from flax import nnx
 import optax
 import orbax.checkpoint as ocp
 from datasets import load_from_disk
+import torch
 from torch.utils.data import DataLoader
 import wandb
 from queue import Queue
@@ -22,11 +18,12 @@ import multiprocessing
 multiprocessing.set_start_method('spawn', force=True)
 
 from uedrlhf.config import BASE_DIR, FINETUNING
+from uedrlhf.fast_data import print_run_banner
 from uedrlhf.networks import LearnabilityResNet
 
 # ==========================================
 PRETRAINED_CHECKPOINT_PATH = os.environ.get(
-    "PRETRAINED_CHECKPOINT_PATH", 
+    "PRETRAINED_CHECKPOINT_PATH",
     FINETUNING.get("pretrained_checkpoint_path", "/home/d/durmusy/Desktop/GIT/new/uedrlhf/outputs/checkpoints/lbec1lyl/epoch_14")
 )
 # ==========================================
@@ -46,14 +43,16 @@ _model_type = DATASET_PATH.rstrip("/").split("/")[-1]
 PROJECT_NAME = os.environ.get("PROJECT_NAME", FINETUNING.get("project_name", "uedrlhf"))
 RUN_NAME = os.environ.get("RUN_NAME", f"resnet-finetune-full-{_model_type}")
 
+SEED = int(os.environ.get("SEED", FINETUNING.get("seed", 0)))
 
-@nnx.jit
-def loss_fn(model: LearnabilityResNet, batch: tuple):
+
+def loss_fn(model: LearnabilityResNet, batch: tuple, deterministic: bool = False):
     img0, img1, preferences = batch
     combined_inputs = jnp.concatenate([img0, img1], axis=0)
-    scores = model(combined_inputs)
+    scores = model(combined_inputs, deterministic=deterministic, return_logits=True)
     scores_input0, scores_input1 = jnp.split(scores, 2, axis=0)
-    logits = (scores_input0 - scores_input1)
+    # preference=1 means img1 is harder; score1 - score0 makes higher score = more difficult
+    logits = (scores_input1 - scores_input0)
     batch_loss = optax.sigmoid_binary_cross_entropy(logits=logits, labels=preferences)
     loss = jnp.mean(batch_loss)
     return loss, logits
@@ -68,16 +67,30 @@ def train_step(model: LearnabilityResNet, optimizer: nnx.Optimizer, batch: tuple
     #acc_mask = (preferences != 0.5)
     #accuracy = jnp.sum((predictions == preferences) * acc_mask) / jnp.maximum(1, jnp.sum(acc_mask))
     accuracy = jnp.mean(predictions == preferences)
-    return loss, accuracy
+
+    tp = jnp.sum((predictions == 1) & (preferences == 1))
+    fp = jnp.sum((predictions == 1) & (preferences == 0))
+    fn = jnp.sum((predictions == 0) & (preferences == 1))
+    denom = 2 * tp + fp + fn
+    f1_score = jnp.where(denom > 0, 2 * tp / jnp.maximum(denom, 1), 0.0)
+
+    return loss, accuracy, f1_score
 
 @nnx.jit
 def eval_step(model: LearnabilityResNet, batch: tuple):
-    loss, logits = loss_fn(model, batch)
+    loss, logits = loss_fn(model, batch, deterministic=True)
     preferences = batch[2]
     predictions = (logits > 0).astype(jnp.float32)
     #acc_mask = (preferences != 0.5)
     accuracy = jnp.mean(predictions == preferences)
-    return loss, accuracy
+
+    tp = jnp.sum((predictions == 1) & (preferences == 1))
+    fp = jnp.sum((predictions == 1) & (preferences == 0))
+    fn = jnp.sum((predictions == 0) & (preferences == 1))
+    denom = 2 * tp + fp + fn
+    f1_score = jnp.where(denom > 0, 2 * tp / jnp.maximum(denom, 1), 0.0)
+
+    return loss, accuracy, f1_score
 
 def prefetch_to_gpu(dataloader, queue_size=2):
     queue = Queue(maxsize=queue_size)
@@ -87,7 +100,6 @@ def prefetch_to_gpu(dataloader, queue_size=2):
             i1 = batch_dict['env_1_image'].numpy() if hasattr(batch_dict['env_1_image'], 'numpy') else np.array(batch_dict['env_1_image'])
             pref = batch_dict['preference'].numpy() if hasattr(batch_dict['preference'], 'numpy') else np.array(batch_dict['preference'])
 
-            # The dataset images are already 0.0 - 1.0 float arrays
             i0_fp32 = i0.astype(np.float32)
             i1_fp32 = i1.astype(np.float32)
             p_fp32 = pref.astype(np.float32)
@@ -105,51 +117,66 @@ def prefetch_to_gpu(dataloader, queue_size=2):
 
 def main():
     if not PRETRAINED_CHECKPOINT_PATH:
-        raise ValueError("CRITICAL: You must specify the PRETRAINED_CHECKPOINT_PATH at the top of the script!")
+        raise ValueError("specify the PRETRAINED_CHECKPOINT_PATH at the top of the script")
 
+    print_run_banner(
+        script="finetune_full.py",
+        mode="full_finetuning",
+        pipeline="dataloader",
+        project=PROJECT_NAME,
+        run_name=RUN_NAME,
+        dataset=DATASET_PATH,
+        pretrained_checkpoint=PRETRAINED_CHECKPOINT_PATH,
+        seed=SEED,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        learning_rate=f"{LEARNING_RATE} (all)",
+    )
     wandb.init(
         project=PROJECT_NAME,
         name=RUN_NAME,
+        group="full_finetuning",
         config={
             "mode": "full_finetuning",
             "batch_size": BATCH_SIZE,
             "epochs": EPOCHS,
             "img_size": IMG_SIZE,
             "learning_rate": f"{LEARNING_RATE} (all)",
+            "seed": SEED,
         }
     )
 
+    torch.manual_seed(SEED)
+    np.random.seed(SEED)
+
     print(f"Loading dataset from {DATASET_PATH}...")
     ds = load_from_disk(DATASET_PATH)
-    ds_splitted = ds.train_test_split(test_size=0.1)
+    ds_splitted = ds.train_test_split(test_size=0.1, seed=SEED)
     ds_splitted.set_format(type="numpy", columns=["env_0_image", "env_1_image", "preference"])
 
     train_loader = DataLoader(ds_splitted["train"], batch_size=BATCH_SIZE, shuffle=True, drop_last=False, num_workers=4)
     eval_loader = DataLoader(ds_splitted["test"], batch_size=BATCH_SIZE, shuffle=False, drop_last=False, num_workers=4)
 
-    rngs = nnx.Rngs(0)
+    rngs = nnx.Rngs(SEED)
     model = LearnabilityResNet(rngs=rngs)
 
     # 1. LOAD PRETRAINED WEIGHTS
     print(f"Loading pretrained weights from: {PRETRAINED_CHECKPOINT_PATH}")
     
-    # We load the exact abstract state shape to tell Orbax what to expect
     graphdef, abstract_state = nnx.split(model)
     
     checkpointer = ocp.StandardCheckpointer()
     restored_state = checkpointer.restore(PRETRAINED_CHECKPOINT_PATH, abstract_state)
     
-    # Re-merge to set the model to eval mode (disables dropout)
+    # Re-merge to set the model to eval mode 
     model = nnx.merge(graphdef, restored_state)
     
-    # Split one final time to return the pure JAX components    
 
     print("Pretrained weights loaded.")
 
 
     print(f"Loading pretrained weights from: {PRETRAINED_CHECKPOINT_PATH}")
 
-    # 2. CREATE STANDARD OPTIMIZER (Micro LR)
     optimizer = nnx.Optimizer(model, optax.adam(LEARNING_RATE), wrt=nnx.Param)
 
     best_eval_loss = float("inf")
@@ -159,40 +186,48 @@ def main():
     for epoch in range(EPOCHS):
         epoch_train_losses = []
         epoch_train_accs = []
+        epoch_train_f1s = []
         model.train()
         for batch_idx, batch_tuple in enumerate(prefetch_to_gpu(train_loader)):
-            loss, acc = train_step(model=model, optimizer=optimizer, batch=batch_tuple)
-            l_val, a_val = loss.item(), acc.item()
+            loss, acc, f1 = train_step(model=model, optimizer=optimizer, batch=batch_tuple)
+            l_val, a_val, f1_val = loss.item(), acc.item(), f1.item()
             epoch_train_losses.append(l_val)
             epoch_train_accs.append(a_val)
-            wandb.log({"batch/train_loss": l_val, "batch/train_accuracy": a_val})
+            epoch_train_f1s.append(f1_val)
+            wandb.log({"batch/train_loss": l_val, "batch/train_accuracy": a_val, "batch/train_f1": f1_val})
 
         train_loss_avg = np.mean(epoch_train_losses)
         train_acc_avg = np.mean(epoch_train_accs)
-        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {train_loss_avg:.4f}, Train Acc: {train_acc_avg:.4f}")
+        train_f1_avg = np.mean(epoch_train_f1s)
+        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {train_loss_avg:.4f}, Train Acc: {train_acc_avg:.4f}, Train F1: {train_f1_avg:.4f}")
 
         epoch_eval_losses = []
         epoch_eval_accs = []
+        epoch_eval_f1s = []
         model.eval()
         for batch_tuple in prefetch_to_gpu(eval_loader):
-            loss, acc = eval_step(model, batch_tuple)
+            loss, acc, f1 = eval_step(model, batch_tuple)
             epoch_eval_losses.append(loss.item())
             epoch_eval_accs.append(acc.item())
+            epoch_eval_f1s.append(f1.item())
 
         eval_loss_avg = np.mean(epoch_eval_losses)
         eval_acc_avg = np.mean(epoch_eval_accs)
-        
+        eval_f1_avg = np.mean(epoch_eval_f1s)
+
         if eval_loss_avg < best_eval_loss:
             best_eval_loss = eval_loss_avg
 
-        print(f"Epoch {epoch+1}/{EPOCHS} - Eval Loss: {eval_loss_avg:.4f}, Eval Acc: {eval_acc_avg:.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} - Eval Loss: {eval_loss_avg:.4f}, Eval Acc: {eval_acc_avg:.4f}, Eval F1: {eval_f1_avg:.4f}")
 
         wandb.log({
             "epoch": epoch + 1,
             "train/loss": train_loss_avg,
             "train/accuracy": train_acc_avg,
+            "train/f1": train_f1_avg,
             "eval/loss": eval_loss_avg,
             "eval/accuracy": eval_acc_avg,
+            "eval/f1": eval_f1_avg,
         })
         
         _, state = nnx.split(model)

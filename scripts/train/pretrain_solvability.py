@@ -1,9 +1,3 @@
-"""Pretrain the Learnability ResNet on the 1M Solvability Dataset.
-
-Usage:
-    uv run scripts/train/pretrain_solvability.py
-"""
-
 import time
 import os
 from pathlib import Path
@@ -17,31 +11,37 @@ from flax import nnx
 import optax
 import orbax.checkpoint as ocp
 from datasets import load_from_disk
+import torch
 from torch.utils.data import DataLoader
 import wandb
 import multiprocessing
 
 multiprocessing.set_start_method('spawn', force=True)
 
-from uedrlhf.config import BASE_DIR
+from uedrlhf.config import BASE_DIR, PRETRAINING
+from uedrlhf.fast_data import print_run_banner
 from uedrlhf.networks import LearnabilityResNet
 
 # Configuration
 # ==========================================
 IMG_SIZE = 120
-BATCH_SIZE = 128 
+BATCH_SIZE = 128
 EPOCHS = 30
 LEARNING_RATE = 1e-3
-DATASET_PATH = str(BASE_DIR / "dataset_1M" / "dataset")
-RUN_NAME = "resnet-pretrain-solvability_f1"
-PROJECT_NAME = "uedrlhf_TRAINING-solvabilitypretrain"
+DATASET_PATH = os.environ.get("DATASET_PATH", str(BASE_DIR / "dataset_1M" / "dataset"))
+# Controls model init, train/test split and shuffling. Runs sharing a SEED are
+# pairable across methods for the Wilcoxon signed-rank test.
+# Env var overrides config.yaml (needed for Slurm array sweeps).
+SEED = int(os.environ.get("SEED", PRETRAINING.get("seed", 0)))
+RUN_NAME = os.environ.get("RUN_NAME", f"resnet-pretrain-solvability_seed{SEED}")
+PROJECT_NAME = os.environ.get("PROJECT_NAME", "uedrlhf_TRAINING-solvabilitypretrain")
 # ==========================================
 
 
 @nnx.jit
 def loss_fn(model: LearnabilityResNet, batch: tuple):
     images, labels = batch
-    logits = model(images)
+    logits = model(images, return_logits=True)
     batch_loss = optax.sigmoid_binary_cross_entropy(logits=logits, labels=labels)
     loss = jnp.mean(batch_loss)
     return loss, logits
@@ -71,7 +71,7 @@ def train_step(model: LearnabilityResNet, optimizer: nnx.Optimizer, rngs: nnx.Rn
 def eval_step(model: LearnabilityResNet, batch: tuple):
     images, labels = batch
 
-    logits = model(images, deterministic=True)
+    logits = model(images, deterministic=True, return_logits=True)
     batch_loss = optax.sigmoid_binary_cross_entropy(logits=logits, labels=labels)
     loss = jnp.mean(batch_loss)
 
@@ -97,7 +97,9 @@ def prefetch_to_gpu(dataloader, queue_size=2):
             lbls = batch_dict['solvable'].numpy() if hasattr(batch_dict['solvable'], 'numpy') else np.array(batch_dict['solvable'])
             
             images_fp32 = imgs.astype(np.float32) / 255.0
-            labels_fp32 = lbls.astype(np.float32)
+            # Dataset stores solvable=1; flip so label 1 = unsolvable (difficult),
+            # matching the finetuning convention where higher score = more difficult.
+            labels_fp32 = 1.0 - lbls.astype(np.float32)
             
             batch = (
                 jnp.array(images_fp32),
@@ -117,6 +119,17 @@ def prefetch_to_gpu(dataloader, queue_size=2):
 
 
 def main():
+    print_run_banner(
+        script="pretrain_solvability.py",
+        pipeline="dataloader",
+        project=PROJECT_NAME,
+        run_name=RUN_NAME,
+        dataset=DATASET_PATH,
+        seed=SEED,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        learning_rate=LEARNING_RATE,
+    )
     wandb.init(
         project=PROJECT_NAME,
         name=RUN_NAME,
@@ -126,15 +139,19 @@ def main():
             "img_size": IMG_SIZE,
             "learning_rate": LEARNING_RATE,
             "optimizer": "adam",
-            "model": "LearnabilityResNet"
+            "model": "LearnabilityResNet",
+            "seed": SEED,
         }
     )
 
+    torch.manual_seed(SEED)
+    np.random.seed(SEED)
+
     print(f"Loading dataset from {DATASET_PATH}...")
     ds = load_from_disk(DATASET_PATH)
-    
+
     print("Splitting dataset into train/test...")
-    ds_splitted = ds.train_test_split(test_size=0.1)
+    ds_splitted = ds.train_test_split(test_size=0.1, seed=SEED)
 
     columns = ['image', 'solvable']
     ds_splitted.set_format(type="numpy", columns=columns)
@@ -153,7 +170,7 @@ def main():
         drop_last=False,
         num_workers=4)
 
-    rngs = nnx.Rngs(0)
+    rngs = nnx.Rngs(SEED)
     model = LearnabilityResNet(rngs=rngs)
     optimizer = nnx.Optimizer(model, optax.adam(learning_rate=LEARNING_RATE), wrt=nnx.Param)
 

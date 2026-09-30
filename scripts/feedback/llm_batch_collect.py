@@ -1,7 +1,7 @@
 """Phase 2 (Gemini): Poll batch job status, download results, write to DB.
 
 Usage:
-    uv run scripts/feedback/llm_batch_collect.py --job batches/YOUR_JOB_ID --model gemini-2.5-flash
+    uv run scripts/feedback/llm_batch_collect.py --job batches/YOUR_JOB_ID --model gemini-3.5-flash
 """
 
 import os
@@ -21,7 +21,7 @@ from google.cloud import storage
 
 from google import genai
 
-from uedrlhf.config import BASE_DIR, LLM_CONFIG, DB_PATH, DATA_DIR, GOOGLE_CREDENTIALS_FILE
+from uedrlhf.config import BASE_DIR, LLM_CONFIG, DB_PATH, DATA_DIR, GOOGLE_CREDENTIALS_FILE, GCS_BUCKET
 from uedrlhf.db import get_connection, resolve_table_name
 from uedrlhf.utils import choice_to_preference
 
@@ -56,7 +56,7 @@ def main():
     else:
         credentials, project_id = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
-    location = "us-central1"
+    location = "global"
     if "locations/" in args.job:
         parts = args.job.split("/")
         try:
@@ -78,13 +78,13 @@ def main():
 
     if state != "JOB_STATE_SUCCEEDED":
         print(f"Job did not succeed: {state}")
-        sys.exit(1)
+        print("Still processing the output")
 
     print("Downloading results from GCS...")
     
     # Initialize GCS client using credentials
     storage_client = storage.Client(credentials=credentials, project=project_id)
-    bucket_name = "uedrlhf-gemini-batch-storage"
+    bucket_name = GCS_BUCKET
     bucket = storage_client.bucket(bucket_name)
 
    
@@ -93,12 +93,12 @@ def main():
 
     # Fallback for jobs submitted before the isolation fix
     if not jsonl_blobs:
-        print(f"No results in gs://uedrlhf-gemini-batch-storage/batch_outputs/{DATA_DIR.name}/ ... falling back to root batch_outputs/")
+        print(f"No results in gs://{bucket_name}/batch_outputs/{DATA_DIR.name}/ ... falling back to root batch_outputs/")
         blobs = list(bucket.list_blobs(prefix="batch_outputs/"))
         jsonl_blobs = [b for b in blobs if b.name.endswith(".jsonl")]
 
     if not jsonl_blobs:
-        print("No result JSONL files found in gs://uedrlhf-gemini-batch-storage/batch_outputs/ at all!")
+        print(f"No result JSONL files found in gs://{bucket_name}/batch_outputs/ at all!")
         sys.exit(1)
     # pick the latest
     latest_blob = max(jsonl_blobs, key=lambda b: b.time_created)

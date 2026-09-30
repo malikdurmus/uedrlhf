@@ -25,4 +25,4 @@ echo "=== Config set: jaxnav / v3 / mixed — batch collect ==="
 set -a; source .env; set +a
 
 # Pass through the --job argument from sbatch command line
-python -u scripts/feedback/llm_batch_collect.py --model gemini-3.5-flash "$@"
+uv run scripts/feedback/llm_batch_collect.py --job projects/962036078429/locations/global/batchPredictionJobs/8186338233181798400 --model gemini-3.5-flash

@@ -32,4 +32,7 @@ obsv, env_state = env.reset(rng)
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 
 env.init_render(ax, env_state, lidar=False, agent=True, goal=True)
-plt.show()
+output_path = "jaxnav_level.png"
+plt.savefig(output_path, bbox_inches="tight")
+plt.close(fig)
+print(f"Saved image to {output_path}")

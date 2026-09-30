@@ -31,7 +31,7 @@ TOTAL_PAIRS = NUM_TRAIN_PAIRS + NUM_TEST_PAIRS
 
 # How many pairs to generate + render per GPU batch (2 envs per pair).
 # 5000 pairs = 10 000 envs ≈ 2 GB on a 9×9 grid with tile_size=32.
-BATCH_PAIRS = 5000
+BATCH_PAIRS = 2000
 
 
 def main():

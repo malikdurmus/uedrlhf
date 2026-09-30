@@ -6,6 +6,8 @@
 #SBATCH --partition=Krater
 #SBATCH --output=outputs/slurm_logs/v3/%j_out.log
 #SBATCH --error=outputs/slurm_logs/v3/%j_err.log
+unset GOOGLE_APPLICATION_CREDENTIALS
+export GEMINI_API_KEY="AQ.Ab8RN6IiJLdVaArCTL7ZHjTh23K--2-BY6TXPIotR0nNTEFT7Q"
 mkdir -p outputs/slurm_logs/v3
 cd ~/Desktop/GIT/new/uedrlhf
 source .venv/bin/activate

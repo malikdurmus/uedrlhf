@@ -1,12 +1,3 @@
-"""Generate environment pairs for difficulty feedback using JAX Rasterizer (V2) this is the difference from v1.
-
-Creates random environment pairs, saves images + state arrays,
-and populates the human_preference_pairs and llm_preference_pairs tables.
-
-Usage:
-    python scripts/generate/gen_difficulty_v2.py
-"""
-
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "False"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.7"

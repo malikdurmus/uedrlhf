@@ -1,9 +1,3 @@
-"""Compare LLM and human preference feedback to check alignment.
-
-Usage:
-    python scripts/analysis/check_alignment.py
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 

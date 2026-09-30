@@ -1,9 +1,3 @@
-"""Check class balance of a compiled preference dataset.
-
-Usage:
-    python scripts/analysis/check_balance.py --dataset data/learnability/compiled_gemini_2_5_flash_dijkstra_15k
-"""
-
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
