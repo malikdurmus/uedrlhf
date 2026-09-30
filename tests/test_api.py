@@ -1,8 +1,17 @@
+import os
+import sys
+from pathlib import Path
+
 import requests
+from dotenv import load_dotenv
 
 # 1. Configuration - Use the clean base domain name
 BASE_URL = "https://llm.mobile.ifi.lmu.de/"
-API_KEY = "sk-9d322b65643244009b1d89326213edac"  # Paste your key inside these quotes
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+API_KEY = os.environ.get("OPENWEBUI_API_KEY")
+if not API_KEY:
+    sys.exit("OPENWEBUI_API_KEY is not set. Copy .env.example to .env and fill it in.")
 
 headers = {
     "Authorization": f"Bearer {API_KEY}",

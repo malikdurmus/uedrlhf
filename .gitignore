@@ -12,8 +12,19 @@ wheels/
 # IDE
 .idea/
 
-# Secrets
+# Secrets / credentials  (never commit these)
 .env
+*.env
+!.env.example
+# Google service-account keys
+account.json
+gen-lang-client-*.json
+keremproject-*.json
+migmg_acc_project-*.json
+*-service-account*.json
+*credentials*.json
+*.pem
+*.key
 
 # Data (generated, large)
 data/*
@@ -24,13 +35,26 @@ outputs/slurm_logs/*
 outputs/plots/*
 wandb/*
 
-# Old directories (kept for reference during migration, remove later)
+# Generated / bulk artefacts (not part of the published codebase)
 orbaxexport/*
 slurm_logs/*
 dataset_balances/*
-
+data_v3/
 data_v2/
 dataset_1M/
 testing_renderer/
 *.png
 *.gif
+
+# Private thesis working notes (not published)
+EXPERIMENTS_STATE.MD
+THESIS_NOTES.MD
+RESULTS_MANIFEST.MD
+
+# Bulk data dumps & logs
+*.jsonl
+*.log
+epochs.txt
+
+# Local scratch / archive
+archive/
